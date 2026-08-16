@@ -1,0 +1,181 @@
+import { useState } from 'react'
+import { useEmployees } from '@/hooks/useEmployees'
+import {
+  vlBalance, slBalance, vscBalance, fmt,
+  monthsOfService, requiresForcedLeave
+} from '@/utils/leaveCalc'
+import EmployeeModal from '@/components/HRMO/EmployeeModal'
+import LeaveTransactionModal from '@/components/HRMO/LeaveTransactionModal'
+import styles from './Dashboard.module.css'
+
+export default function HRMODashboard() {
+  const { employees, loading, addEmployee, updateEmployee } = useEmployees()
+  const [search, setSearch]           = useState('')
+  const [typeFilter, setTypeFilter]   = useState('')
+  const [showAdd, setShowAdd]         = useState(false)
+  const [editTarget, setEditTarget]   = useState(null)
+  const [txnTarget, setTxnTarget]     = useState(null)
+
+  const filtered = employees.filter(e => {
+    const q = search.toLowerCase()
+    const name = `${e.last_name} ${e.first_name}`.toLowerCase()
+    return (
+      (!q || name.includes(q) || (e.employee_no || '').toLowerCase().includes(q)) &&
+      (!typeFilter || e.emp_type === typeFilter)
+    )
+  })
+
+  const teaching    = employees.filter(e => e.emp_type === 'Teaching').length
+  const nonTeaching = employees.filter(e => e.emp_type === 'Non-Teaching').length
+  const lowLeave    = employees.filter(e => {
+    if (e.emp_type === 'Non-Teaching') return vlBalance(e) < 5
+    return (e.vsc_balance || 0) < 5
+  }).length
+  const forcedLeave = employees.filter(e => requiresForcedLeave(e)).length
+
+  return (
+    <div className={styles.page}>
+      {/* Stats */}
+      <div className={styles.statsRow}>
+        <div className={styles.statCard}>
+          <div className={styles.statLabel}>Total Personnel</div>
+          <div className={styles.statValue}>{employees.length}</div>
+        </div>
+        <div className={styles.statCard}>
+          <div className={styles.statLabel}>Teaching</div>
+          <div className={styles.statValue} style={{ color: '#7B1C1C' }}>{teaching}</div>
+          <div className={styles.statSub}>VSC / PVP basis</div>
+        </div>
+        <div className={styles.statCard}>
+          <div className={styles.statLabel}>Non-Teaching</div>
+          <div className={styles.statValue} style={{ color: '#185FA5' }}>{nonTeaching}</div>
+          <div className={styles.statSub}>VL + SL auto-accrual</div>
+        </div>
+        <div className={styles.statCard}>
+          <div className={styles.statLabel}>Low Balance (&lt;5 days)</div>
+          <div className={styles.statValue} style={{ color: '#A32D2D' }}>{lowLeave}</div>
+        </div>
+        <div className={styles.statCard}>
+          <div className={styles.statLabel}>Forced Leave Required</div>
+          <div className={styles.statValue} style={{ color: '#854F0B' }}>{forcedLeave}</div>
+          <div className={styles.statSub}>≥10 VL days (CSC rule)</div>
+        </div>
+      </div>
+
+      {/* Table card */}
+      <div className={styles.card}>
+        <div className={styles.cardHeader}>
+          <span className={styles.cardTitle}>Personnel Leave Records</span>
+          <div className={styles.headerActions}>
+            <button className={styles.btnPrimary} onClick={() => { setEditTarget(null); setShowAdd(true) }}>
+              + Add Employee
+            </button>
+          </div>
+        </div>
+
+        <div className={styles.toolbar}>
+          <input
+            className={styles.searchInput}
+            type="text"
+            placeholder="Search by name or employee no…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+          <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
+            <option value="">All types</option>
+            <option value="Teaching">Teaching</option>
+            <option value="Non-Teaching">Non-Teaching</option>
+          </select>
+        </div>
+
+        {loading
+          ? <div className={styles.emptyState}>Loading…</div>
+          : <div className={styles.tableWrap}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>Name / Position</th>
+                    <th>Type</th>
+                    <th>Date Hired</th>
+                    <th>Mos. Served</th>
+                    <th>VL / VSC Balance</th>
+                    <th>SL Balance</th>
+                    <th>Used VL/VSC</th>
+                    <th>Used SL</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.length === 0
+                    ? <tr><td colSpan={10} className={styles.emptyState}>No employees found.</td></tr>
+                    : filtered.map(emp => {
+                        const vl = emp.emp_type === 'Teaching' ? vscBalance(emp) : vlBalance(emp)
+                        const sl = emp.emp_type === 'Teaching' ? null : slBalance(emp)
+                        const vu = emp.emp_type === 'Teaching' ? (emp.vsc_used || 0) : (emp.vl_used || 0)
+                        const su = emp.emp_type === 'Teaching' ? null : (emp.sl_used || 0)
+                        const low = vl < 5
+                        const forced = requiresForcedLeave(emp)
+                        return (
+                          <tr key={emp.id}>
+                            <td>
+                              <div className={styles.nameCell}>
+                                {emp.last_name}, {emp.first_name} {emp.middle_name ? emp.middle_name[0] + '.' : ''}
+                              </div>
+                              <div className={styles.subCell}>{emp.employee_no} · {emp.position}</div>
+                            </td>
+                            <td>
+                              <span className={`${styles.pill} ${emp.emp_type === 'Teaching' ? styles.pillTeaching : styles.pillNT}`}>
+                                {emp.emp_type === 'Teaching' ? 'Teaching' : 'Non-Teaching'}
+                              </span>
+                            </td>
+                            <td className={styles.subCell}>{emp.hired_date}</td>
+                            <td className={styles.subCell}>{monthsOfService(emp.hired_date)} mos</td>
+                            <td className={styles.creditCell}>{fmt(vl)}</td>
+                            <td className={styles.creditCell}>{sl !== null ? fmt(sl) : '—'}</td>
+                            <td className={styles.subCell}>{fmt(vu)}</td>
+                            <td className={styles.subCell}>{su !== null ? fmt(su) : '—'}</td>
+                            <td>
+                              {low && <span className={`${styles.pill} ${styles.pillWarn}`}>Low</span>}
+                              {forced && <span className={`${styles.pill} ${styles.pillInfo}`}>Forced Leave</span>}
+                              {!low && !forced && <span className={`${styles.pill} ${styles.pillOk}`}>OK</span>}
+                            </td>
+                            <td>
+                              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                                <button className={styles.btnSm} onClick={() => { setEditTarget(emp); setShowAdd(true) }}>Edit</button>
+                                <button className={styles.btnSm} onClick={() => setTxnTarget(emp)}>+ Leave</button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })
+                  }
+                </tbody>
+              </table>
+            </div>
+        }
+      </div>
+
+      {showAdd && (
+        <EmployeeModal
+          employee={editTarget}
+          onSave={async (data) => {
+            const result = editTarget
+              ? await updateEmployee(editTarget.id, data)
+              : await addEmployee(data)
+            if (result.success) setShowAdd(false)
+            return result
+          }}
+          onClose={() => setShowAdd(false)}
+        />
+      )}
+
+      {txnTarget && (
+        <LeaveTransactionModal
+          employee={txnTarget}
+          onClose={() => setTxnTarget(null)}
+        />
+      )}
+    </div>
+  )
+}

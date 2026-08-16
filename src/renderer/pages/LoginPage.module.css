@@ -1,0 +1,115 @@
+.wrap {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #5c1414 0%, #7B1C1C 50%, #9e2424 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Animated concentric rings */
+.rings { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.ring1, .ring2, .ring3 {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.08);
+  animation: pulse 3s ease-in-out infinite;
+}
+.ring1 { width: 300px; height: 300px; animation-delay: 0s; }
+.ring2 { width: 500px; height: 500px; animation-delay: 0.5s; }
+.ring3 { width: 700px; height: 700px; animation-delay: 1s; }
+@keyframes pulse {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.03); }
+}
+
+.card {
+  background: #fff;
+  border-radius: 16px;
+  padding: 36px 40px 28px;
+  width: 400px;
+  max-width: 95vw;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.3);
+  position: relative;
+  z-index: 1;
+  max-height: 94vh;
+  overflow-y: auto;
+}
+
+.sealWrap { display: flex; justify-content: center; margin-bottom: 16px; }
+.seal {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: #7B1C1C;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(123,28,28,0.4);
+  animation: sealPulse 2.5s ease-in-out infinite;
+}
+@keyframes sealPulse {
+  0%, 100% { box-shadow: 0 4px 16px rgba(123,28,28,0.4); }
+  50% { box-shadow: 0 4px 28px rgba(123,28,28,0.7); }
+}
+.sealInner { color: #fff; font-size: 13px; font-weight: 600; letter-spacing: 0.02em; }
+
+.header { text-align: center; margin-bottom: 24px; }
+.title { font-size: 18px; font-weight: 600; color: #1a1a18; margin-bottom: 4px; }
+.sub { font-size: 13px; color: #5a5a56; }
+.sub2 { font-size: 11px; color: #9a9a94; margin-top: 2px; }
+
+.form { display: flex; flex-direction: column; gap: 14px; }
+
+.modeTabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: #f2f2ef; border-radius: 9px; padding: 4px; margin-bottom: 16px; }
+.modeTabs button { height: 34px; border: 0; border-radius: 7px; background: transparent; color: #686862; font-weight: 500; cursor: pointer; }
+.modeTabs .modeActive { background: #fff; color: #7B1C1C; box-shadow: 0 1px 4px rgba(0,0,0,0.12); }
+
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field label { font-size: 12px; font-weight: 500; color: #5a5a56; }
+.field input { height: 38px; border: 0.5px solid #c8c8c2; border-radius: 8px; padding: 0 12px; font-size: 14px; }
+.field input:focus { border-color: #7B1C1C; box-shadow: 0 0 0 3px rgba(123,28,28,0.12); outline: none; }
+
+.passWrap { position: relative; }
+.passWrap input { padding-right: 40px; width: 100%; }
+.eyeBtn { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; font-size: 14px; cursor: pointer; padding: 4px; }
+
+.errorBox {
+  background: #FCEBEB;
+  border: 0.5px solid #F09595;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: #A32D2D;
+}
+
+.successBox { background: #EAF3DE; border: 0.5px solid #97C459; border-radius: 8px; padding: 10px 12px; font-size: 13px; color: #3B6D11; }
+.registrationHint { margin-top: 12px; font-size: 11px; line-height: 1.4; text-align: center; color: #777771; }
+
+.submitBtn {
+  height: 42px;
+  background: #7B1C1C;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  margin-top: 4px;
+  transition: background .15s, transform .1s;
+}
+.submitBtn:hover:not(:disabled) { background: #6a1818; }
+.submitBtn:active:not(:disabled) { transform: scale(0.98); }
+
+.roleHint {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 0.5px solid #e4e4e0;
+  padding-top: 14px;
+}
+.roleItem { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #5a5a56; }
+.roleBadge { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; white-space: nowrap; }
+
+.footer { text-align: center; font-size: 11px; color: #9a9a94; margin-top: 16px; }
