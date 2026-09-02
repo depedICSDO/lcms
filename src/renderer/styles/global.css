@@ -1,11 +1,21 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --maroon: #7B1C1C;
-  --maroon-dark: #5c1414;
-  --maroon-light: #9e2424;
-  --maroon-bg: #fdf4f4;
-  --maroon-border: #e8c5c5;
+  /* Isabela City / SWABE identity palette, sampled from the official seal. */
+  --sdo-blue: #2E3192;
+  --sdo-blue-dark: #1D226F;
+  --sdo-blue-light: #494DB2;
+  --sdo-red: #ED1C24;
+  --sdo-red-dark: #B91219;
+  --sdo-yellow: #FFF200;
+  --sdo-gold: #F4C430;
+
+  /* Backward-compatible aliases used by existing components. */
+  --maroon: var(--sdo-blue);
+  --maroon-dark: var(--sdo-blue-dark);
+  --maroon-light: var(--sdo-blue-light);
+  --maroon-bg: #F2F3FF;
+  --maroon-border: #C7C9EE;
 
   --surface-0: #f4f3f0;
   --surface-1: #f9f9f7;
@@ -18,9 +28,9 @@
   --border: #e4e4e0;
   --border-strong: #c8c8c2;
 
-  --accent: #185FA5;
-  --accent-bg: #EBF3FC;
-  --accent-text: #0c447c;
+  --accent: var(--sdo-red);
+  --accent-bg: #FFF0F1;
+  --accent-text: #A70F16;
 
   --success: #3B6D11;
   --success-bg: #EAF3DE;
@@ -28,6 +38,12 @@
   --warning-bg: #FAEEDA;
   --danger: #A32D2D;
   --danger-bg: #FCEBEB;
+  --danger-border: #F09595;
+  --info-bg: #EBF3FC;
+  --info-border: #B5D4F4;
+  --info-text: #0c447c;
+  --success-border: #97C459;
+  --warning-border: #FAC775;
 
   --radius: 8px;
   --radius-lg: 12px;
@@ -42,7 +58,43 @@
   -webkit-font-smoothing: antialiased;
 }
 
-body { overflow: hidden; height: 100vh; }
+:root[data-theme='dark'] {
+  --sdo-blue: #777BE3;
+  --sdo-blue-dark: #25296F;
+  --sdo-blue-light: #9699EE;
+  --sdo-red: #FF5960;
+  --sdo-red-dark: #FF8A8F;
+  --sdo-yellow: #F8E84E;
+  --sdo-gold: #D9B52B;
+  --maroon-bg: #252849;
+  --maroon-border: #4A4F86;
+  --surface-0: #0F1118;
+  --surface-1: #171A24;
+  --surface-2: #1E222E;
+  --text-primary: #F1F3F8;
+  --text-secondary: #BEC3D1;
+  --text-muted: #858C9E;
+  --border: #303543;
+  --border-strong: #4A5060;
+  --accent-bg: #3A2026;
+  --accent-text: #FFB4B7;
+  --success: #A8DA86;
+  --success-bg: #1D3526;
+  --success-border: #426B4D;
+  --warning: #F2CA73;
+  --warning-bg: #392F1D;
+  --warning-border: #6F5B2B;
+  --danger: #FF9A9E;
+  --danger-bg: #3A2024;
+  --danger-border: #713D43;
+  --info-bg: #1C3045;
+  --info-border: #335979;
+  --info-text: #A8D5FF;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+  --shadow-md: 0 2px 10px rgba(0,0,0,0.4);
+}
+
+body { overflow: hidden; height: 100vh; background: var(--surface-0); transition: background-color .18s, color .18s; }
 #root { height: 100vh; display: flex; flex-direction: column; }
 
 /* Scrollbar */
@@ -66,7 +118,7 @@ input, select, textarea {
 input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: var(--maroon);
-  box-shadow: 0 0 0 3px rgba(123,28,28,0.1);
+  box-shadow: 0 0 0 3px rgba(46,49,146,0.12);
 }
 textarea { height: auto; padding: 8px 10px; resize: vertical; }
 

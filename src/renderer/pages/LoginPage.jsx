@@ -69,7 +69,7 @@ export default function LoginPage() {
         </div>
 
         <div className={styles.header}>
-          <h1 className={styles.title}>Leave Credits System</h1>
+          <h1 className={styles.title}>Leave Credits Management System (LCMS)</h1>
           <p className={styles.sub}>Personnel Leave Management</p>
           <p className={styles.sub2}>
             Secure leave records and credit tracking
@@ -156,29 +156,8 @@ export default function LoginPage() {
           <p className={styles.registrationHint}>Registration is limited to users pre-approved by the IECES dashboard manager.</p>
         )}
 
-        <div className={styles.roleHint}>
-          <div className={styles.roleItem}>
-            <span
-              className={styles.roleBadge}
-              style={{ background: "#7B1C1C", color: "#fff" }}
-            >
-              HRMO
-            </span>
-            <span>HRMO / administrator — full access</span>
-          </div>
-          <div className={styles.roleItem}>
-            <span
-              className={styles.roleBadge}
-              style={{ background: "#EBF3FC", color: "#0c447c" }}
-            >
-              AOII
-            </span>
-            <span>School-based — view &amp; print only</span>
-          </div>
-        </div>
-
         <div className={styles.footer}>
-          Leave Credits System · v{__APP_VERSION__ || "1.0.0"}
+          Leading with Compassionate and Modernized Services · v{__APP_VERSION__ || "1.0.0"}
         </div>
       </div>
     </div>

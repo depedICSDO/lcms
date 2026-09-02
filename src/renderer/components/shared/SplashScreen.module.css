@@ -4,7 +4,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #5c1414 0%, #7B1C1C 100%);
+  background: linear-gradient(135deg, var(--sdo-blue-dark) 0%, var(--sdo-blue) 68%, var(--sdo-red) 100%);
   gap: 16px;
 }
 

@@ -4,8 +4,8 @@
   gap: 16px;
   padding: 0 20px;
   height: 52px;
-  background: #fff;
-  border-bottom: 0.5px solid var(--border);
+  background: var(--surface-2);
+  border-bottom: 3px solid var(--sdo-gold);
   flex-shrink: 0;
   z-index: 50;
 }
@@ -16,7 +16,8 @@
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background: #7B1C1C;
+  background: var(--sdo-blue);
+  border: 2px solid var(--sdo-yellow);
   color: #fff;
   font-size: 10px;
   font-weight: 600;
@@ -30,6 +31,21 @@
 .sub { font-size: 10px; color: var(--text-muted); }
 
 .right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.switchBtn { padding: 5px 10px; border-radius: var(--radius); border: 1px solid var(--sdo-gold); background: #FFFBE0; color: var(--sdo-blue-dark); font-size: 11px; font-weight: 600; }
+.switchBtn:hover { background: var(--sdo-yellow); }
+
+.databaseActions { display: flex; gap: 5px; padding-right: 10px; border-right: 1px solid var(--border); }
+.dataBtn {
+  padding: 5px 10px;
+  border-radius: var(--radius);
+  border: 0.5px solid var(--border-strong);
+  background: var(--surface-2);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.dataBtn:hover:not(:disabled) { background: var(--maroon-bg); color: var(--sdo-blue); }
+.dataBtn:disabled { opacity: 0.55; cursor: wait; }
+.updateReadyBtn { padding: 5px 10px; border: 1px solid var(--success-border); border-radius: var(--radius); background: var(--success-bg); color: var(--success); font-size: 11px; font-weight: 600; }
 
 .userInfo { display: flex; align-items: center; gap: 6px; }
 
@@ -51,4 +67,4 @@
   color: var(--text-secondary);
   transition: background .15s;
 }
-.logoutBtn:hover { background: var(--surface-0); color: #7B1C1C; }
+.logoutBtn:hover { background: var(--maroon-bg); color: var(--sdo-blue); }

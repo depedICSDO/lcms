@@ -3,21 +3,35 @@ import {
   slBalance,
   vscBalance,
   totalEarned,
-  monthsOfService,
+  yearsOfService,
   vscMaxDays,
   generateAccrualLog,
   fmt,
+  protectedVlBalance,
+  retirementLeaveMonths,
+  ctoBalance,
+  ctoCredits,
+  LEAVE_TYPES_NONTEACHING,
+  leaveAvailability,
 } from "@/utils/leaveCalc";
 import styles from "../HRMO/Modal.module.css";
 
 export default function EmployeeDetailModal({ employee, onClose }) {
   const isTeaching = employee.emp_type === "Teaching";
-  const months = monthsOfService(employee.hired_date);
+  const years = yearsOfService(employee.hired_date);
+  const transactions = [...(employee.leave_transactions || [])].sort((a, b) =>
+    String(b.created_at || b.date_from || '').localeCompare(String(a.created_at || a.date_from || '')),
+  );
   const vl = vlBalance(employee);
   const sl = slBalance(employee);
   const vsc = vscBalance(employee);
   const earned = totalEarned(employee.hired_date);
   const accrualLog = !isTeaching ? generateAccrualLog(employee, 6) : [];
+  const protectedVl = protectedVlBalance(employee);
+  const annualLeaveTypes = !isTeaching
+    ? ['special_privilege', 'mandatory_forced', 'wellness'].map(key =>
+        LEAVE_TYPES_NONTEACHING.find(type => type.key === key)).filter(Boolean)
+    : [];
   const vscPct = isTeaching
     ? Math.min(
         100,
@@ -59,7 +73,7 @@ export default function EmployeeDetailModal({ employee, onClose }) {
                 fontSize: 11,
                 fontWeight: 500,
                 background: isTeaching ? "#fdf4f4" : "#EBF3FC",
-                color: isTeaching ? "#7B1C1C" : "#0c447c",
+                color: isTeaching ? "var(--sdo-red-dark)" : "var(--sdo-blue)",
               }}
             >
               {employee.emp_type}
@@ -83,7 +97,7 @@ export default function EmployeeDetailModal({ employee, onClose }) {
                 alignSelf: "center",
               }}
             >
-              {employee.position} · {months} months served
+              {employee.position} · {years} year(s) in service
             </span>
           </div>
 
@@ -168,7 +182,7 @@ export default function EmployeeDetailModal({ employee, onClose }) {
                     style={{
                       height: "100%",
                       borderRadius: 4,
-                      background: "#7B1C1C",
+                      background: "var(--sdo-blue)",
                       width: `${vscPct}%`,
                     }}
                   />
@@ -243,9 +257,27 @@ export default function EmployeeDetailModal({ employee, onClose }) {
                 </div>
               </div>
 
-              <div className={styles.dividerLabel}>
-                Accrual History (last 6 months)
+              <div className={styles.dividerLabel}>Protected VL from Cancelled Mandatory Leave</div>
+              <div className={styles.infoBox}>
+                {fmt(protectedVl)} day(s) are usable for leave and retirement, but cannot be monetized.
+                At 22 working days per month, this equals {fmt(retirementLeaveMonths(employee))} month(s) of retirement leave.
               </div>
+
+              <div className={styles.dividerLabel}>Annual Leave Entitlements ({new Date().getFullYear()})</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 14 }}>
+                {annualLeaveTypes.map(type => {
+                  const availability = leaveAvailability(type, employee)
+                  return <div className={styles.balCard} key={type.key}>
+                    <div className={styles.balLabel}>{type.label}</div>
+                    <div className={styles.balVal}>{fmt(availability.remaining)} left</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>
+                      {fmt(availability.used)} used of {fmt(type.annualEntitlement)} · {type.deduction}
+                    </div>
+                  </div>
+                })}
+              </div>
+
+              <div className={styles.dividerLabel}>Accrual History (last 6 months)</div>
               {accrualLog.map((row, i) => (
                 <div
                   key={i}
@@ -292,6 +324,41 @@ export default function EmployeeDetailModal({ employee, onClose }) {
             </>
           )}
 
+          <div className={styles.dividerLabel}>Compensatory Time Off (CTO)</div>
+          <div className={styles.infoBox}>Active balance: <strong>{fmt(ctoBalance(employee))} day(s)</strong>. Each grant is automatically forfeited on its one-year expiration date.</div>
+          {ctoCredits(employee).filter(credit => credit.remaining_days > 0).map(credit => (
+            <div key={credit.id || credit.expires_on} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '0.5px solid var(--border)', fontSize: 12, background: !credit.expired && credit.daysUntilExpiry <= 14 ? 'var(--danger-bg)' : 'transparent' }}>
+              <span>{fmt(credit.remaining_days)} day(s) · Credited {credit.granted_on || '—'}</span>
+              <span style={{ color: credit.expired || credit.daysUntilExpiry <= 14 ? 'var(--danger)' : 'var(--text-secondary)', fontWeight: credit.daysUntilExpiry <= 14 ? 600 : 400 }}>
+                {credit.expired ? 'Forfeited' : `Expires ${credit.expires_on}${credit.daysUntilExpiry <= 14 ? ` (${credit.daysUntilExpiry} day(s) left)` : ''}`}
+              </span>
+            </div>
+          ))}
+
+          <div className={styles.dividerLabel}>Complete Leave Credit History</div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+              <thead>
+                <tr><th style={{ textAlign: 'left', padding: 6 }}>Recorded</th><th style={{ textAlign: 'left', padding: 6 }}>Leave / Credit</th><th style={{ textAlign: 'left', padding: 6 }}>Transaction</th><th style={{ textAlign: 'right', padding: 6 }}>Days</th><th style={{ textAlign: 'left', padding: 6 }}>Leave Dates</th><th style={{ textAlign: 'left', padding: 6 }}>Remarks</th></tr>
+              </thead>
+              <tbody>
+                {transactions.length === 0
+                  ? <tr><td colSpan="6" style={{ padding: 12, textAlign: 'center', color: 'var(--text-muted)' }}>No leave credit transactions recorded.</td></tr>
+                  : transactions.map(transaction => {
+                      const days = Number(transaction.days || 0)
+                      return <tr key={transaction.id} style={{ borderTop: '0.5px solid var(--border)' }}>
+                        <td style={{ padding: 6 }}>{String(transaction.created_at || '').slice(0, 10) || '—'}</td>
+                        <td style={{ padding: 6 }}>{transaction.leave_type || '—'}</td>
+                        <td style={{ padding: 6 }}>{transaction.txn_type?.replaceAll('_', ' ') || '—'}</td>
+                        <td style={{ padding: 6, textAlign: 'right', color: days < 0 ? 'var(--danger)' : 'var(--success)' }}>{days > 0 ? '+' : ''}{fmt(days)}</td>
+                        <td style={{ padding: 6 }}>{transaction.date_from || '—'}{transaction.date_to && transaction.date_to !== transaction.date_from ? ` – ${transaction.date_to}` : ''}</td>
+                        <td style={{ padding: 6 }}>{transaction.remarks || transaction.reason || '—'}</td>
+                      </tr>
+                    })}
+              </tbody>
+            </table>
+          </div>
+
           {employee.notes && (
             <>
               <div className={styles.dividerLabel}>Notes</div>
@@ -315,7 +382,7 @@ export default function EmployeeDetailModal({ employee, onClose }) {
             Close
           </button>
           <button className={styles.btnSave} onClick={() => window.print()}>
-            🖨 Print
+            Print Employee History
           </button>
         </div>
       </div>

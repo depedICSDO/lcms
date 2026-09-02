@@ -79,12 +79,25 @@
   vertical-align: middle;
 }
 .table tr:last-child td { border-bottom: none; }
-.table tr:hover td { background: #fdf4f4; }
+.table tr:hover td { background: var(--maroon-bg); }
 
 .nameCell { font-size: 13px; font-weight: 500; }
+.nameButton {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+}
+.nameButton:hover { color: var(--sdo-blue); text-decoration-color: currentColor; }
 .subCell { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
 .creditCell { font-size: 13px; font-weight: 500; }
-.maroon { color: #7B1C1C; }
+.maroon { color: var(--sdo-blue); }
 
 .pill {
   display: inline-flex;
@@ -96,11 +109,15 @@
   white-space: nowrap;
   margin-right: 4px;
 }
-.pillTeaching { background: #fdf4f4; color: #7B1C1C; }
+.pillTeaching { background: var(--danger-bg); color: var(--sdo-red-dark); }
 .pillNT { background: var(--accent-bg); color: var(--accent-text); }
-.pillOk { background: #EAF3DE; color: #3B6D11; }
-.pillWarn { background: #FAEEDA; color: #854F0B; }
+.pillOk { background: var(--success-bg); color: var(--success); }
+.pillWarn { background: var(--warning-bg); color: var(--warning); }
 .pillInfo { background: var(--accent-bg); color: var(--accent-text); }
+.pillReject { background: var(--danger-bg); color: var(--danger); }
+
+.inlineError { padding: 12px 16px; color: var(--danger); font-size: 12px; }
+.inlineSuccess { padding: 10px 16px; color: var(--success); background: var(--success-bg); font-size: 12px; }
 
 .emptyState {
   text-align: center;
@@ -117,20 +134,26 @@
   flex-shrink: 0;
 }
 .infoBoxBlue {
-  background: #EBF3FC;
-  border: 0.5px solid #B5D4F4;
-  color: #0c447c;
+  background: var(--info-bg);
+  border: 0.5px solid var(--info-border);
+  color: var(--info-text);
 }
 .infoBoxWarn {
-  background: #FAEEDA;
-  border: 0.5px solid #FAC775;
-  color: #633806;
+  background: var(--warning-bg);
+  border: 0.5px solid var(--warning-border);
+  color: var(--warning);
+}
+.infoBoxDanger {
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  color: var(--danger);
+  font-weight: 500;
 }
 
 /* Buttons */
 .btnPrimary {
   padding: 6px 14px;
-  background: #7B1C1C;
+  background: var(--sdo-blue);
   color: #fff;
   border: none;
   border-radius: var(--radius);
@@ -138,7 +161,7 @@
   font-weight: 500;
   transition: background .15s;
 }
-.btnPrimary:hover { background: #6a1818; }
+.btnPrimary:hover { background: var(--sdo-blue-dark); }
 
 .btnOutline {
   padding: 6px 14px;
@@ -161,3 +184,7 @@
   transition: background .15s;
 }
 .btnSm:hover { background: var(--surface-0); }
+.btnPrimarySm { padding: 3px 10px; background: var(--sdo-blue); color: #fff; border: 0; border-radius: 5px; font-size: 11px; }
+.btnPrimarySm:hover { background: var(--sdo-blue-dark); }
+.btnDangerSm { padding: 3px 10px; background: transparent; color: var(--danger); border: 0.5px solid var(--danger-border); border-radius: 5px; font-size: 11px; }
+.btnDangerSm:hover { background: var(--danger-bg); }

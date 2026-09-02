@@ -1,7 +1,7 @@
 {
-  "name": "leave-credits-system",
+  "name": "leave-credits-management-system",
   "version": "1.0.0",
-  "description": "Personnel leave credits management system",
+  "description": "Leave Credits Management System (LCMS) for personnel records and leave workflows",
   "type": "module",
   "main": "src/main/main.js",
   "author": "BuzzJay <jaybhee84>",
@@ -10,12 +10,14 @@
     "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "build": "vite build",
     "test": "node --test",
+    "postinstall": "electron-builder install-app-deps",
     "electron": "electron .",
     "dist": "vite build && electron-builder",
     "preview": "vite preview"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
+    "better-sqlite3": "^11.10.0",
     "electron-updater": "^6.3.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
@@ -29,11 +31,24 @@
     "wait-on": "^8.0.0"
   },
   "build": {
-    "appId": "com.leavecreditssystem.app",
-    "productName": "Leave Credits System",
+    "appId": "com.leavecreditsmanagementsystem.app",
+    "productName": "Leave Credits Management System (LCMS)",
+    "electronUpdaterCompatibility": ">=2.16",
     "win": {
       "target": "nsis",
       "icon": "public/icon.ico"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.business"
     },
     "nsis": {
       "oneClick": false,
@@ -41,8 +56,8 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "jaybhee84",
-      "repo": "leave-credits-system"
+      "owner": "depedICSDO",
+      "repo": "lcms"
     },
     "files": [
       "dist/**/*",

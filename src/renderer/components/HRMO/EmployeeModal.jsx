@@ -3,9 +3,20 @@ import { useAuth } from '@/hooks/useAuth'
 import { POSITIONS_TEACHING, POSITIONS_NONTEACHING, vscMaxDays } from '@/utils/leaveCalc'
 import styles from './Modal.module.css'
 
+const CUSTOM_POSITIONS_KEY = 'lcms_custom_positions'
+
+function loadCustomPositions() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CUSTOM_POSITIONS_KEY) || '{}')
+    return { Teaching: saved.Teaching || [], 'Non-Teaching': saved['Non-Teaching'] || [] }
+  } catch {
+    return { Teaching: [], 'Non-Teaching': [] }
+  }
+}
+
 const BLANK = {
   last_name: '', first_name: '', middle_name: '', employee_no: '',
-  emp_type: 'Teaching', position: '', emp_status: 'Permanent',
+  emp_type: '', position: '', emp_status: 'Permanent',
   hired_date: '', salary_grade: '', monthly_salary: '',
   // Teaching
   vsc_balance: '', vsc_used: '', vsc_earned_this_sy: '', vsc_max: 15,
@@ -24,20 +35,45 @@ export default function EmployeeModal({ employee, onSave, onClose }) {
   } : { ...BLANK })
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
+  const [customPositions, setCustomPositions] = useState(loadCustomPositions)
+  const initialKnownPositions = employee?.emp_type === 'Teaching'
+    ? [...POSITIONS_TEACHING, ...customPositions.Teaching]
+    : [...POSITIONS_NONTEACHING, ...customPositions['Non-Teaching']]
+  const [isCustomPosition, setIsCustomPosition] = useState(
+    Boolean(employee?.position && !initialKnownPositions.includes(employee.position))
+  )
 
   function set(field, val) {
     setForm(f => ({ ...f, [field]: val }))
   }
 
+  function selectEmployeeType(empType) {
+    setForm(current => ({ ...current, emp_type: empType, position: current.emp_type === empType ? current.position : '' }))
+    if (form.emp_type !== empType) setIsCustomPosition(false)
+  }
+
+  function selectPosition(value) {
+    if (value === '__custom__') {
+      setIsCustomPosition(true)
+      set('position', '')
+    } else {
+      setIsCustomPosition(false)
+      set('position', value)
+    }
+  }
+
   async function handleSave() {
+    if (!form.emp_type) { setErr('Select Teaching or Non-Teaching first.'); return }
     if (!form.last_name.trim()) { setErr('Last name is required.'); return }
     if (!form.first_name.trim()) { setErr('First name is required.'); return }
     if (!form.hired_date) { setErr('Date hired is required.'); return }
     if (!form.position.trim()) { setErr('Position is required.'); return }
     setSaving(true)
     setErr('')
+    const normalizedPosition = form.position.trim()
     const payload = {
       ...form,
+      position: normalizedPosition,
       vl_override: form.vl_override !== '' ? parseFloat(form.vl_override) : null,
       sl_override: form.sl_override !== '' ? parseFloat(form.sl_override) : null,
       vsc_balance: parseFloat(form.vsc_balance) || 0,
@@ -52,11 +88,50 @@ export default function EmployeeModal({ employee, onSave, onClose }) {
     }
     const res = await onSave(payload)
     setSaving(false)
-    if (res?.error) setErr(res.error)
+    if (res?.error) {
+      setErr(res.error)
+    } else if (isCustomPosition && !customPositions[form.emp_type].includes(normalizedPosition)) {
+      const updated = {
+        ...customPositions,
+        [form.emp_type]: [...customPositions[form.emp_type], normalizedPosition].sort((a, b) => a.localeCompare(b))
+      }
+      setCustomPositions(updated)
+      localStorage.setItem(CUSTOM_POSITIONS_KEY, JSON.stringify(updated))
+    }
   }
 
-  const positions = form.emp_type === 'Teaching' ? POSITIONS_TEACHING : POSITIONS_NONTEACHING
+  const builtInPositions = form.emp_type === 'Teaching' ? POSITIONS_TEACHING : POSITIONS_NONTEACHING
+  const positions = [...new Set([...builtInPositions, ...(customPositions[form.emp_type] || [])])]
   const autoVscMax = form.hired_date ? vscMaxDays(form.hired_date) : 15
+
+  if (!isEdit && !form.emp_type) {
+    return (
+      <div className={styles.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
+        <div className={styles.modal} style={{ maxWidth: 480 }}>
+          <div className={styles.modalHeader}>
+            <h2>Add Employee — Select Employee Type</h2>
+            <button className={styles.closeBtn} onClick={onClose}>×</button>
+          </div>
+          <div className={styles.body}>
+            <div className={styles.employeeTypeGrid}>
+              <button className={styles.employeeTypeCard} onClick={() => selectEmployeeType('Teaching')}>
+                <span className={styles.employeeTypeIcon} aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="m3 10 9-5 9 5-9 5-9-5Z"/><path d="M7 12.3V17c2.8 2.1 7.2 2.1 10 0v-4.7"/><path d="M21 10v6"/></svg>
+                </span>
+                <span>Teaching</span>
+              </button>
+              <button className={styles.employeeTypeCard} onClick={() => selectEmployeeType('Non-Teaching')}>
+                <span className={styles.employeeTypeIcon} aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5h6v2M3 12h18M10 12v2h4v-2"/></svg>
+                </span>
+                <span>Non-Teaching</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className={styles.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
@@ -73,7 +148,7 @@ export default function EmployeeModal({ employee, onSave, onClose }) {
               <button
                 key={t}
                 className={`${styles.typeTab} ${form.emp_type === t ? styles.typeTabActive : ''}`}
-                onClick={() => set('emp_type', t)}
+                onClick={() => selectEmployeeType(t)}
               >
                 {t}
               </button>
@@ -108,15 +183,17 @@ export default function EmployeeModal({ employee, onSave, onClose }) {
             </div>
             <div className={styles.field}>
               <label>Position *</label>
-              <input
-                list="plantilla-positions"
+              <select value={isCustomPosition ? '__custom__' : form.position} onChange={e => selectPosition(e.target.value)}>
+                <option value="">Select a position</option>
+                {positions.map(position => <option key={position} value={position}>{position}</option>)}
+                <option value="__custom__">+ Add custom position…</option>
+              </select>
+              {isCustomPosition && <input
+                autoFocus
                 value={form.position}
                 onChange={e => set('position', e.target.value)}
-                placeholder="Select or type a plantilla position"
-              />
-              <datalist id="plantilla-positions">
-                {positions.map(p => <option key={p} value={p} />)}
-              </datalist>
+                placeholder="Enter the new position title"
+              />}
             </div>
             <div className={styles.field}>
               <label>Salary Grade</label>

@@ -1,51 +1,6 @@
 -- ============================================================
--- Leave Credits System — Supabase Schema
+-- Leave Credits Management System (LCMS) — Supabase Schema
 -- ============================================================
-
--- -----------------------------------------------
--- PROFILES TABLE (login identity + role)
--- -----------------------------------------------
-create table if not exists leave_profiles (
-  id           uuid primary key default gen_random_uuid(),
-  username     text unique not null,
-  email        text unique not null,
-  full_name    text not null,
-  role         text not null check (role in ('hrmo', 'aoii')),
-  -- 'hrmo' = HRMO / administrator (full access)
-  -- 'aoii' = Administrative Officer II / school-based (view/print only)
-  school_id    text not null default 'DEFAULT',
-  school_name  text not null default 'Default Organization',
-  is_active    boolean default true,
-  created_at   timestamptz default now(),
-  updated_at   timestamptz default now()
-);
-
--- -----------------------------------------------
--- ALLOWED USERS WHITELIST
--- -----------------------------------------------
-create table if not exists leave_allowed_users (
-  id                 uuid primary key default gen_random_uuid(),
-  username           text unique not null,
-  email              text not null,
-  full_name          text,
-  role               text not null default 'aoii' check (role in ('hrmo', 'aoii')),
-  school_id          text not null default 'DEFAULT',
-  school_name        text not null default 'Default Organization',
-  registered_user_id uuid unique,
-  added_by           text,
-  created_at         timestamptz default now()
-);
-
--- Safe migration for databases created with an earlier schema version.
-alter table leave_allowed_users add column if not exists email text;
-alter table leave_allowed_users add column if not exists full_name text;
-alter table leave_allowed_users add column if not exists role text not null default 'aoii';
-alter table leave_allowed_users add column if not exists school_id text not null default 'DEFAULT';
-alter table leave_allowed_users add column if not exists school_name text not null default 'Default Organization';
-alter table leave_allowed_users add column if not exists registered_user_id uuid unique;
-
--- The IECES dashboard manager populates this table. No public registration
--- account is pre-approved by default.
 
 -- -----------------------------------------------
 -- EMPLOYEES TABLE
@@ -73,6 +28,7 @@ create table if not exists leave_employees (
   sl_used      numeric(6,2) default 0,
   vl_override  numeric(6,2),                 -- HRMO manual correction; null = use auto-computed
   sl_override  numeric(6,2),                 -- null = use auto-computed
+  protected_vl_balance numeric(6,2) not null default 0 check (protected_vl_balance >= 0),
 
   -- Teaching leave fields (VSC per DepEd Order 013, s. 2024)
   -- Teaching staff are NOT entitled to VL/SL
@@ -92,9 +48,9 @@ create table if not exists leave_employees (
   updated_at   timestamptz default now()
 );
 
-create index idx_leave_employees_school on leave_employees (school_id);
-create index idx_leave_employees_type   on leave_employees (emp_type);
-create index idx_leave_employees_active on leave_employees (is_active);
+create index if not exists idx_leave_employees_school on leave_employees (school_id);
+create index if not exists idx_leave_employees_type   on leave_employees (emp_type);
+create index if not exists idx_leave_employees_active on leave_employees (is_active);
 
 -- -----------------------------------------------
 -- LEAVE TRANSACTIONS TABLE
@@ -113,6 +69,9 @@ create table if not exists leave_transactions (
                    'VL_ADJUST',     -- HRMO manual VL adjustment
                    'SL_ADJUST',     -- HRMO manual SL adjustment
                    'MONETIZE',      -- Leave monetization
+                   'CTO_CREDIT',    -- CTO grant with a one-year expiry
+                   'CTO_DEBIT',     -- CTO usage
+                   'VL_PROTECTED_CREDIT', -- cancelled mandatory leave, not monetizable
                    'SPECIAL'        -- Special leave (maternity, VAWC, emergency, etc.)
                  )),
 
@@ -132,9 +91,64 @@ create table if not exists leave_transactions (
   created_at     timestamptz default now()
 );
 
-create index idx_leave_txn_employee on leave_transactions (employee_id);
-create index idx_leave_txn_date     on leave_transactions (date_from);
-create index idx_leave_txn_school   on leave_transactions (school_id);
+create index if not exists idx_leave_txn_employee on leave_transactions (employee_id);
+create index if not exists idx_leave_txn_date     on leave_transactions (date_from);
+create index if not exists idx_leave_txn_school   on leave_transactions (school_id);
+
+-- -----------------------------------------------
+-- LEAVE REQUESTS (AOII submission -> HRMO review)
+-- No employee balance changes occur while a request is pending.
+-- -----------------------------------------------
+create table if not exists leave_requests (
+  id uuid primary key default gen_random_uuid(),
+  employee_id uuid not null references leave_employees(id) on delete cascade,
+  school_id text not null,
+  requested_by_user uuid not null references auth.users(id) on delete restrict,
+  requested_by text not null,
+  txn_type text not null check (txn_type in ('VL_DEBIT', 'SL_DEBIT', 'VSC_DEBIT', 'SPECIAL', 'MONETIZE', 'CTO_DEBIT')),
+  leave_category text not null,
+  leave_type text not null,
+  days numeric(5,2) not null check (days > 0),
+  date_from date not null,
+  date_to date not null,
+  reason text,
+  remarks text,
+  with_pay boolean not null default true,
+  monetization_option text check (monetization_option is null or monetization_option in ('VL25_SL5', 'VL30')),
+  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected', 'cancelled')),
+  form6_confirmed boolean not null default false,
+  form6_confirmed_at timestamptz,
+  reviewed_by text,
+  reviewed_at timestamptz,
+  rejection_reason text,
+  cancellation_reason text,
+  cancelled_at timestamptz,
+  transaction_id uuid unique references leave_transactions(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  check (date_to >= date_from)
+);
+
+create index if not exists idx_leave_requests_status on leave_requests (status, created_at);
+create index if not exists idx_leave_requests_school on leave_requests (school_id, created_at);
+create index if not exists idx_leave_requests_employee on leave_requests (employee_id, created_at);
+
+-- CTO grants are stored as separate dated batches. Queries exclude expires_on <= current_date,
+-- which makes forfeiture automatic even when the app was closed on the expiration date.
+create table if not exists leave_cto_credits (
+  id uuid primary key default gen_random_uuid(),
+  employee_id uuid not null references leave_employees(id) on delete cascade,
+  school_id text not null,
+  granted_days numeric(5,2) not null check (granted_days > 0),
+  remaining_days numeric(5,2) not null check (remaining_days >= 0 and remaining_days <= granted_days),
+  granted_on date not null,
+  expires_on date not null,
+  remarks text,
+  granted_by text not null,
+  created_at timestamptz not null default now(),
+  check (expires_on = (granted_on + interval '1 year')::date)
+);
+create index if not exists idx_cto_employee_expiry on leave_cto_credits(employee_id, expires_on) where remaining_days > 0;
 
 -- -----------------------------------------------
 -- ACCRUAL LOG TABLE
@@ -170,146 +184,16 @@ on conflict do nothing;
 -- -----------------------------------------------
 -- ROW LEVEL SECURITY
 -- -----------------------------------------------
-alter table leave_profiles       enable row level security;
-alter table leave_allowed_users  enable row level security;
 alter table leave_employees      enable row level security;
 alter table leave_transactions   enable row level security;
+alter table leave_requests       enable row level security;
+alter table leave_cto_credits    enable row level security;
 alter table leave_accrual_log    enable row level security;
 alter table leave_sy_config      enable row level security;
-
--- Profiles: users can read all, update only their own
-create policy "profiles_select" on leave_profiles for select using (true);
-create policy "profiles_update" on leave_profiles for update using (auth.uid() = id);
-
--- Allowed users: readable by all authenticated users
-create policy "allowed_select"  on leave_allowed_users for select using (auth.role() = 'authenticated');
-
--- Employees: all authenticated users can read; only HRMO can write
-create policy "employees_select" on leave_employees for select using (auth.role() = 'authenticated');
-create policy "employees_insert" on leave_employees for insert
-  with check (
-    exists (
-      select 1 from leave_profiles
-      where id = auth.uid() and role = 'hrmo'
-    )
-  );
-create policy "employees_update" on leave_employees for update
-  using (
-    exists (
-      select 1 from leave_profiles
-      where id = auth.uid() and role = 'hrmo'
-    )
-  );
-create policy "employees_delete" on leave_employees for delete
-  using (
-    exists (
-      select 1 from leave_profiles
-      where id = auth.uid() and role = 'hrmo'
-    )
-  );
-
--- Transactions: all authenticated can read; HRMO can insert
-create policy "txn_select" on leave_transactions for select using (auth.role() = 'authenticated');
-create policy "txn_insert"  on leave_transactions for insert
-  with check (
-    exists (
-      select 1 from leave_profiles
-      where id = auth.uid() and role = 'hrmo'
-    )
-  );
-
--- Accrual log: all authenticated can read; HRMO can insert
-create policy "accrual_select" on leave_accrual_log for select using (auth.role() = 'authenticated');
-create policy "accrual_insert" on leave_accrual_log for insert
-  with check (
-    exists (
-      select 1 from leave_profiles
-      where id = auth.uid() and role = 'hrmo'
-    )
-  );
-
--- SY config: readable by all
-create policy "sy_select" on leave_sy_config for select using (true);
 
 -- -----------------------------------------------
 -- HELPER FUNCTIONS
 -- -----------------------------------------------
-
--- Get email by username (for login lookup)
-create or replace function get_leave_email_by_username(uname text)
-returns text language sql security definer as $$
-  select email from leave_profiles where username = uname limit 1;
-$$;
-
--- Registration is available only to people pre-approved in the dashboard
--- manager's leave_allowed_users list. Optional allowlist emails must match.
-create or replace function can_register_leave_user(uname text, user_email text)
-returns boolean
-language sql
-security definer
-set search_path = public
-as $$
-  select exists (
-    select 1
-    from leave_allowed_users
-    where lower(username) = lower(trim(uname))
-      and registered_user_id is null
-      and email is not null
-      and lower(email) = lower(trim(user_email))
-  );
-$$;
-
-revoke all on function can_register_leave_user(text, text) from public;
-grant execute on function can_register_leave_user(text, text) to anon, authenticated;
-
--- Enforce the same allowlist in the database so the browser check cannot be
--- bypassed. The trigger creates the application profile from manager data.
-create or replace function handle_leave_user_signup()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  allowed leave_allowed_users%rowtype;
-  signup_username text := trim(new.raw_user_meta_data ->> 'username');
-begin
-  select * into allowed
-  from leave_allowed_users
-  where lower(username) = lower(signup_username)
-    and registered_user_id is null
-    and email is not null
-    and lower(email) = lower(new.email)
-  limit 1;
-
-  if not found then
-    raise exception 'Registration is not authorized for this user';
-  end if;
-
-  insert into leave_profiles (
-    id, username, email, full_name, role, school_id, school_name
-  ) values (
-    new.id,
-    allowed.username,
-    new.email,
-    coalesce(nullif(allowed.full_name, ''), nullif(new.raw_user_meta_data ->> 'full_name', ''), allowed.username),
-    allowed.role,
-    allowed.school_id,
-    allowed.school_name
-  );
-
-  update leave_allowed_users
-  set registered_user_id = new.id
-  where id = allowed.id;
-
-  return new;
-end;
-$$;
-
-drop trigger if exists on_leave_auth_user_created on auth.users;
-create trigger on_leave_auth_user_created
-  after insert on auth.users
-  for each row execute function handle_leave_user_signup();
 
 -- Months of service (for auto-computed balances in views)
 create or replace function months_of_service(hired date, ref_date date default current_date)
