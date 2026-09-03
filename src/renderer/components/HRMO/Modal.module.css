@@ -21,6 +21,108 @@
   box-shadow: 0 20px 60px rgba(0,0,0,0.25);
 }
 
+/* The employee form is intentionally roomier than the other action dialogs. */
+.employeeModal {
+  width: 750px;
+  border-radius: 16px;
+}
+
+.employeeModal .modalHeader {
+  padding: 20px 24px;
+}
+
+.employeeModal .modalHeader h2 {
+  font-size: 20px;
+}
+
+.employeeModal .body {
+  padding: 20px 24px;
+}
+
+.employeeModal .footer {
+  padding: 16px 24px;
+}
+
+.employeeModal .field {
+  gap: 6px;
+}
+
+.employeeModal .field label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.employeeModal .field input,
+.employeeModal .field select {
+  height: 43px;
+  font-size: 14px;
+}
+
+.employeeModal .field textarea {
+  font-size: 14px;
+}
+
+.salarySelectors {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.salarySelectors select {
+  width: 100%;
+}
+
+.sourceNote {
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.sourceNote a {
+  color: var(--sdo-blue);
+}
+
+.salaryGuidanceWarning {
+  margin-top: 3px;
+  color: var(--warning);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.employeeModal .grid2,
+.employeeModal .grid3 {
+  gap: 12px;
+}
+
+.employeeModal .typeTabs {
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.employeeModal .typeTab {
+  padding: 10px 20px;
+  font-size: 14px;
+}
+
+.employeeModal .dividerLabel {
+  font-size: 12px;
+  margin-top: 18px;
+  padding-bottom: 8px;
+}
+
+.employeeModal .btnSave,
+.employeeModal .btnCancel {
+  padding: 10px 22px;
+  font-size: 14px;
+}
+
+@media (max-width: 720px) {
+  .employeeModal .grid3,
+  .employeeModal .grid2 {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media print {
   body * { visibility: hidden; }
   .overlay, .overlay * { visibility: visible; }
@@ -92,6 +194,11 @@
   transition: all .15s;
 }
 .typeTabActive { background: var(--sdo-blue); color: #fff; border-color: var(--sdo-blue); }
+.selectedEmployeeType {
+  display: inline-flex;
+  align-items: center;
+  cursor: default;
+}
 
 .employeeTypeGrid {
   display: grid;

@@ -46,6 +46,8 @@
 .dataBtn:hover:not(:disabled) { background: var(--maroon-bg); color: var(--sdo-blue); }
 .dataBtn:disabled { opacity: 0.55; cursor: wait; }
 .updateReadyBtn { padding: 5px 10px; border: 1px solid var(--success-border); border-radius: var(--radius); background: var(--success-bg); color: var(--success); font-size: 11px; font-weight: 600; }
+.salaryAlertBtn { padding: 5px 10px; border: 1px solid var(--warning-border); border-radius: var(--radius); background: var(--warning-bg); color: var(--warning); font-size: 11px; font-weight: 600; }
+.salaryAlertBtn:hover { filter: brightness(0.97); }
 
 .userInfo { display: flex; align-items: center; gap: 6px; }
 

@@ -20,7 +20,12 @@ create table if not exists leave_employees (
                check (emp_status in ('Permanent','Temporary','Casual','Substitute','Co-terminus')),
   hired_date   date not null,                 -- date of original appointment
   salary_grade text,
+  salary_step integer not null default 1 check (salary_step between 1 and 8),
+  salary_step_mode text not null default 'manual' check (salary_step_mode in ('manual','automatic')),
+  salary_step_basis_date date,
   monthly_salary numeric(10,2),
+  retirement_date date,
+  retirement_notes text,
 
   -- Non-Teaching leave fields
   -- VL and SL auto-accrue at 1.25 days/month each (CSC MC 41 s.1998)
@@ -71,7 +76,10 @@ create table if not exists leave_transactions (
                    'MONETIZE',      -- Leave monetization
                    'CTO_CREDIT',    -- CTO grant with a one-year expiry
                    'CTO_DEBIT',     -- CTO usage
-                   'VL_PROTECTED_CREDIT', -- cancelled mandatory leave, not monetizable
+                   'VL_PROTECTED_CREDIT', -- legacy protected VL restoration
+                   'VL_CANCELLATION_CREDIT', -- authority cancellation; ordinary VL restored
+                   'MANDATORY_FORFEIT', -- untaken annual mandatory VL forfeiture
+                   'MANDATORY_EXEMPT',  -- retirement/separation year exemption audit
                    'SPECIAL'        -- Special leave (maternity, VAWC, emergency, etc.)
                  )),
 
@@ -114,7 +122,9 @@ create table if not exists leave_requests (
   reason text,
   remarks text,
   with_pay boolean not null default true,
-  monetization_option text check (monetization_option is null or monetization_option in ('VL25_SL5', 'VL30')),
+  monetization_option text check (monetization_option is null or monetization_option ~ '^VL(1[0-9]|2[0-9]|30)$' or monetization_option = 'VL25_SL5'),
+  vl_regular_deducted numeric(5,2) not null default 0,
+  vl_protected_deducted numeric(5,2) not null default 0,
   status text not null default 'pending' check (status in ('pending', 'approved', 'rejected', 'cancelled')),
   form6_confirmed boolean not null default false,
   form6_confirmed_at timestamptz,
@@ -122,6 +132,8 @@ create table if not exists leave_requests (
   reviewed_at timestamptz,
   rejection_reason text,
   cancellation_reason text,
+  cancellation_by_authority boolean not null default false,
+  cancelled_by text,
   cancelled_at timestamptz,
   transaction_id uuid unique references leave_transactions(id) on delete set null,
   created_at timestamptz not null default now(),
@@ -219,6 +231,10 @@ select
   e.emp_type,
   e.emp_status,
   e.hired_date,
+  e.salary_grade,
+  e.salary_step,
+  e.salary_step_mode,
+  e.salary_step_basis_date,
   e.monthly_salary,
   e.is_active,
 

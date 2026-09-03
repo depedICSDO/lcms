@@ -4,17 +4,36 @@
 alter table public.leave_employees
   add column if not exists protected_vl_balance numeric(6,2) not null default 0
   check (protected_vl_balance >= 0);
+alter table public.leave_employees
+  add column if not exists retirement_date date,
+  add column if not exists retirement_notes text;
+alter table public.leave_employees
+  add column if not exists salary_step integer not null default 1
+    check (salary_step between 1 and 8),
+  add column if not exists salary_step_mode text not null default 'manual'
+    check (salary_step_mode in ('manual','automatic')),
+  add column if not exists salary_step_basis_date date;
 
 alter table public.leave_requests
   add column if not exists monetization_option text
   check (monetization_option is null or monetization_option in ('VL25_SL5', 'VL30')),
   add column if not exists cancellation_reason text,
+  add column if not exists cancellation_by_authority boolean not null default false,
+  add column if not exists cancelled_by text,
+  add column if not exists vl_regular_deducted numeric(5,2) not null default 0,
+  add column if not exists vl_protected_deducted numeric(5,2) not null default 0,
   add column if not exists cancelled_at timestamptz;
+
+alter table public.leave_requests drop constraint if exists leave_requests_monetization_option_check;
+alter table public.leave_requests add constraint leave_requests_monetization_option_check
+  check (monetization_option is null or monetization_option ~ '^VL(1[0-9]|2[0-9]|30)$'
+    or monetization_option = 'VL25_SL5');
 
 alter table public.leave_transactions drop constraint if exists leave_transactions_txn_type_check;
 alter table public.leave_transactions add constraint leave_transactions_txn_type_check check (txn_type in (
   'VL_DEBIT','SL_DEBIT','VSC_CREDIT','VSC_DEBIT','VL_ADJUST','SL_ADJUST',
-  'MONETIZE','SPECIAL','CTO_CREDIT','CTO_DEBIT','VL_PROTECTED_CREDIT'
+  'MONETIZE','SPECIAL','CTO_CREDIT','CTO_DEBIT','VL_PROTECTED_CREDIT','VL_CANCELLATION_CREDIT',
+  'MANDATORY_FORFEIT','MANDATORY_EXEMPT'
 ));
 
 alter table public.leave_requests drop constraint if exists leave_requests_txn_type_check;
@@ -48,7 +67,6 @@ returns trigger language plpgsql set search_path = '' as $$
 declare annual_limit numeric; annual_used numeric;
 begin
   annual_limit := case new.leave_type
-    when 'Mandatory / Forced Leave' then 5
     when 'Special Privilege Leave' then 3
     when 'Wellness Leave' then 3
     else null
@@ -147,20 +165,24 @@ create or replace function public.lcms_record_monetization(
   employee_uuid uuid, deduction_option text, monetization_date date, monetization_note text default null
 ) returns uuid language plpgsql security definer set search_path = '' as $$
 declare employee public.leave_employees%rowtype; actor text; vl_days numeric; sl_days numeric;
-  regular_vl numeric; available_sl numeric; transaction_uuid uuid;
+  regular_vl numeric; available_sl numeric; transaction_uuid uuid; monetized_this_year numeric;
 begin
   if not public.lcms_is_hrmo() then raise exception 'Only an active HRMO account can record monetization'; end if;
-  if deduction_option = 'VL25_SL5' then vl_days := 25; sl_days := 5;
-  elsif deduction_option = 'VL30' then vl_days := 30; sl_days := 0;
-  else raise exception 'Invalid monetization option'; end if;
+  if deduction_option ~ '^VL(1[0-9]|2[0-9]|30)$' then
+    vl_days := substring(deduction_option from 3)::numeric; sl_days := 0;
+  else raise exception 'Standard monetization must be from 10 to 30 VL days'; end if;
   select * into employee from public.leave_employees where id = employee_uuid for update;
   if not found or employee.emp_type <> 'Non-Teaching' then raise exception 'Monetization is only for non-teaching employees'; end if;
   regular_vl := coalesce(employee.vl_override,
     greatest(0, public.months_of_service(employee.hired_date) * 1.25 - coalesce(employee.vl_used, 0)));
   available_sl := coalesce(employee.sl_override,
     greatest(0, public.months_of_service(employee.hired_date) * 1.25 - coalesce(employee.sl_used, 0)));
-  if regular_vl < vl_days then raise exception 'Insufficient monetizable VL balance'; end if;
-  if available_sl < sl_days then raise exception 'Insufficient SL balance'; end if;
+  select coalesce(sum(abs(days)), 0) into monetized_this_year
+  from public.leave_transactions where employee_id = employee.id and txn_type = 'MONETIZE'
+    and date_from >= date_trunc('year', monetization_date)::date
+    and date_from < (date_trunc('year', monetization_date) + interval '1 year')::date;
+  if monetized_this_year + vl_days > 30 then raise exception 'The annual 30-day monetization maximum would be exceeded'; end if;
+  if regular_vl - vl_days < 5 then raise exception 'At least 5 regular VL days must remain after monetization'; end if;
   select username into actor from public."LCMS-profiles" where id = (select auth.uid()) and is_active;
   update public.leave_employees set
     vl_used = coalesce(vl_used, 0) + vl_days, sl_used = coalesce(sl_used, 0) + sl_days,
@@ -169,9 +191,10 @@ begin
     updated_at = now(), updated_by = actor where id = employee.id;
   insert into public.leave_transactions
     (employee_id, school_id, txn_type, leave_type, days, date_from, date_to, remarks, recorded_by)
-  values (employee.id, employee.school_id, 'MONETIZE', 'Monetization of Leave Credits', -30,
+  values (employee.id, employee.school_id, 'MONETIZE', 'Monetization of Leave Credits', -vl_days,
           monetization_date, monetization_date,
-          concat(deduction_option, case when monetization_note is null then '' else ': ' || monetization_note end), actor)
+          concat('CSC Sec. 22 standard monetization: ', vl_days, ' VL day(s)',
+            case when monetization_note is null then '' else ': ' || monetization_note end), actor)
   returning id into transaction_uuid;
   return transaction_uuid;
 end $$;
@@ -197,7 +220,6 @@ begin
   -- Calendar-year entitlements: mandatory leave is charged to VL; Special
   -- Privilege and Wellness Leave are recorded outside accumulated VL/SL.
   annual_limit := case requested.leave_category
-    when 'mandatory_forced' then 5
     when 'special_privilege' then 3
     when 'wellness' then 3
     else null
@@ -216,7 +238,9 @@ begin
   end if;
 
   if requested.txn_type = 'MONETIZE' then
-    if requested.days <> 30 then raise exception 'Monetization must deduct exactly 30 days'; end if;
+    if requested.days <> substring(requested.monetization_option from 3)::numeric then
+      raise exception 'Requested monetization days do not match the selected VL deduction';
+    end if;
     select public.lcms_record_monetization(employee.id, requested.monetization_option,
       requested.date_from, requested.remarks) into new_transaction_id;
   elsif requested.txn_type = 'CTO_DEBIT' then
@@ -260,6 +284,8 @@ begin
   end if;
   update public.leave_requests set status = 'approved', form6_confirmed = true,
     form6_confirmed_at = now(), reviewed_by = approver_name, reviewed_at = now(),
+    vl_regular_deducted = case when requested.txn_type = 'VL_DEBIT' then coalesce(regular_used, 0) else 0 end,
+    vl_protected_deducted = case when requested.txn_type = 'VL_DEBIT' then coalesce(protected_used, 0) else 0 end,
     transaction_id = new_transaction_id, updated_at = now() where id = requested.id;
   return new_transaction_id;
 end $$;
@@ -268,6 +294,7 @@ create or replace function public.lcms_cancel_mandatory_leave(
   request_uuid uuid, cancellation_note text default null
 ) returns uuid language plpgsql security definer set search_path = '' as $$
 declare requested public.leave_requests%rowtype; employee public.leave_employees%rowtype; actor text; transaction_uuid uuid;
+  regular_to_restore numeric; protected_to_restore numeric;
 begin
   select * into requested from public.leave_requests where id = request_uuid for update;
   if not found or requested.status <> 'approved' or requested.leave_category <> 'mandatory_forced' then
@@ -279,16 +306,145 @@ begin
   end if;
   select * into employee from public.leave_employees where id = requested.employee_id for update;
   select username into actor from public."LCMS-profiles" where id = (select auth.uid()) and is_active;
-  update public.leave_employees set protected_vl_balance = protected_vl_balance + requested.days,
+  regular_to_restore := coalesce(requested.vl_regular_deducted, 0);
+  protected_to_restore := coalesce(requested.vl_protected_deducted, 0);
+  -- Legacy approvals did not store the split; those deductions came from
+  -- regular VL first, so restore them there for backward compatibility.
+  if regular_to_restore + protected_to_restore = 0 then regular_to_restore := requested.days; end if;
+  update public.leave_employees set
+    vl_used = greatest(0, coalesce(vl_used, 0) - regular_to_restore),
+    vl_override = case when vl_override is null then null else vl_override + regular_to_restore end,
+    protected_vl_balance = protected_vl_balance + protected_to_restore,
     updated_at = now(), updated_by = actor where id = employee.id;
   insert into public.leave_transactions
     (employee_id, school_id, txn_type, leave_type, days, date_from, date_to, remarks, recorded_by)
-  values (employee.id, employee.school_id, 'VL_PROTECTED_CREDIT', 'Cancelled Mandatory Leave (Protected VL)',
-          requested.days, current_date, current_date, cancellation_note, actor)
+  values (employee.id, employee.school_id, 'VL_CANCELLATION_CREDIT', 'Authority-Cancelled Mandatory Leave (VL Restored)',
+          requested.days, requested.date_from, requested.date_to,
+          concat('Cancelled by signing authority due to exigency of service',
+            '; regular VL restored: ', regular_to_restore,
+            '; protected VL restored: ', protected_to_restore,
+            case when cancellation_note is null then '' else ': ' || cancellation_note end), actor)
   returning id into transaction_uuid;
   update public.leave_requests set status = 'cancelled', cancellation_reason = cancellation_note,
+    cancellation_by_authority = true, cancelled_by = actor,
     cancelled_at = now(), updated_at = now() where id = requested.id;
   return transaction_uuid;
+end $$;
+
+-- Apply the CSC year-end rule after a calendar year closes. Ordinary VL and
+-- Mandatory/Forced Leave both count toward the five-day requirement.
+-- Authority-cancelled scheduled days count as excused and their exact original
+-- VL deduction is restored. Retirement/separation
+-- during the year creates an audit entry and skips forfeiture.
+create or replace function public.lcms_process_mandatory_year_end(compliance_year integer)
+returns integer language plpgsql security definer set search_path = '' as $$
+declare
+  employee public.leave_employees%rowtype;
+  year_start date := make_date(compliance_year, 1, 1);
+  year_end date := make_date(compliance_year, 12, 31);
+  vl_applications numeric;
+  authority_cancelled numeric;
+  actual_vl_used numeric;
+  monetized numeric;
+  regular_balance numeric;
+  eligibility_balance numeric;
+  requirement_remaining numeric;
+  forfeiture numeric;
+  processed integer := 0;
+begin
+  if compliance_year >= extract(year from current_date)::integer then
+    raise exception 'Mandatory-leave forfeiture can only process a completed calendar year';
+  end if;
+
+  for employee in
+    select * from public.leave_employees
+    where emp_type = 'Non-Teaching'
+    for update
+  loop
+    if exists (
+      select 1 from public.leave_transactions
+      where employee_id = employee.id
+        and txn_type in ('MANDATORY_FORFEIT', 'MANDATORY_EXEMPT')
+        and date_from = year_end
+    ) then continue; end if;
+
+    if employee.retirement_date >= year_start and employee.retirement_date < year_end then
+      insert into public.leave_transactions
+        (employee_id, school_id, txn_type, leave_type, days, date_from, date_to, remarks, recorded_by)
+      values
+        (employee.id, employee.school_id, 'MANDATORY_EXEMPT', 'Mandatory Leave Retirement/Separation Exemption',
+         0, year_end, year_end,
+         concat('No year-end forfeiture: retirement/separation dated ', employee.retirement_date,
+           case when employee.retirement_notes is null then '' else ' · ' || employee.retirement_notes end),
+         'LCMS YEAR-END');
+      processed := processed + 1;
+      continue;
+    end if;
+
+    select coalesce(sum(abs(days)), 0) into vl_applications
+    from public.leave_transactions
+    where employee_id = employee.id and txn_type = 'VL_DEBIT'
+      and leave_type in ('Vacation Leave (VL)', 'Mandatory / Forced Leave')
+      and date_from between year_start and year_end;
+
+    select coalesce(sum(abs(days)), 0) into authority_cancelled
+    from public.leave_transactions
+    where employee_id = employee.id and txn_type in ('VL_CANCELLATION_CREDIT', 'VL_PROTECTED_CREDIT')
+      and date_from between year_start and year_end;
+
+    select coalesce(sum(abs(days)), 0) into monetized
+    from public.leave_transactions
+    where employee_id = employee.id and txn_type = 'MONETIZE'
+      and date_from between year_start and year_end;
+
+    actual_vl_used := greatest(0, vl_applications - authority_cancelled);
+    regular_balance := coalesce(employee.vl_override,
+      greatest(0, public.months_of_service(employee.hired_date, year_end) * 1.25 - coalesce(employee.vl_used, 0)));
+    eligibility_balance := regular_balance + coalesce(employee.protected_vl_balance, 0) + actual_vl_used;
+
+    -- Fewer than 10 VL days makes forced leave optional, except when the
+    -- employee monetized leave during the year.
+    if eligibility_balance < 10 and monetized = 0 then continue; end if;
+
+    requirement_remaining := greatest(0, 5 - least(5, actual_vl_used + authority_cancelled));
+    forfeiture := least(requirement_remaining, regular_balance);
+
+    update public.leave_employees set
+      vl_used = coalesce(vl_used, 0) + forfeiture,
+      vl_override = case when vl_override is null then null else greatest(0, vl_override - forfeiture) end,
+      updated_at = now(), updated_by = 'LCMS YEAR-END'
+    where id = employee.id;
+
+    insert into public.leave_transactions
+      (employee_id, school_id, txn_type, leave_type, days, date_from, date_to, remarks, recorded_by)
+    values
+      (employee.id, employee.school_id, 'MANDATORY_FORFEIT', 'Mandatory Leave Year-End Forfeiture',
+       -forfeiture, year_end, year_end,
+       concat('Calendar year ', compliance_year, ': ', actual_vl_used,
+         ' VL day(s) taken; ', authority_cancelled,
+         ' day(s) cancelled by signing authority; ', monetized,
+         ' day(s) monetized; ', forfeiture, ' day(s) forfeited.'),
+       'LCMS YEAR-END');
+    processed := processed + 1;
+  end loop;
+  return processed;
+end $$;
+
+revoke all on function public.lcms_process_mandatory_year_end(integer) from public;
+
+-- Supabase Cron runs shortly after midnight UTC every January 1 and processes
+-- the calendar year that just ended. Re-running this migration replaces the job.
+create extension if not exists pg_cron;
+do $$
+declare existing_job bigint;
+begin
+  select jobid into existing_job from cron.job where jobname = 'lcms-mandatory-year-end';
+  if existing_job is not null then perform cron.unschedule(existing_job); end if;
+  perform cron.schedule(
+    'lcms-mandatory-year-end',
+    '5 0 1 1 *',
+    $job$select public.lcms_process_mandatory_year_end(extract(year from current_date)::integer - 1);$job$
+  );
 end $$;
 
 revoke all on function public.lcms_grant_cto(uuid,numeric,date,text) from public;

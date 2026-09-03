@@ -7,13 +7,19 @@ export default function Topbar() {
   const { user, logout, isHRMO, isDiagnostic, resetDiagnosticRole } = useAuth()
   const [databaseBusy, setDatabaseBusy] = useState(false)
   const [updateStatus, setUpdateStatus] = useState({ state: 'idle', message: 'Check for updates' })
+  const [salaryGuidanceStatus, setSalaryGuidanceStatus] = useState({ state: 'idle', message: 'Check official DBM releases' })
 
   useEffect(() => {
     const updater = window.electronAPI
     if (!updater?.getUpdateStatus) return
     updater.getUpdateStatus().then(status => status && setUpdateStatus(status))
     updater.onUpdateStatus?.(setUpdateStatus)
-    return () => updater.removeUpdateListeners?.()
+    updater.getDbmSalaryGuidanceStatus?.().then(status => status && setSalaryGuidanceStatus(status))
+    updater.onDbmSalaryGuidanceStatus?.(setSalaryGuidanceStatus)
+    return () => {
+      updater.removeUpdateListeners?.()
+      updater.removeDbmSalaryGuidanceListeners?.()
+    }
   }, [])
 
   async function handleUpdate() {
@@ -25,7 +31,10 @@ export default function Topbar() {
       await window.electronAPI?.openUpdateRelease()
       return
     }
-    const status = await window.electronAPI?.checkForUpdates()
+    const [status] = await Promise.all([
+      window.electronAPI?.checkForUpdates(),
+      window.electronAPI?.checkDbmSalaryGuidance?.().then(result => result && setSalaryGuidanceStatus(result)),
+    ])
     if (status) setUpdateStatus(status)
   }
 
@@ -83,6 +92,15 @@ export default function Topbar() {
         {window.electronAPI?.checkForUpdates && (
           <button className={updateStatus.state === 'downloaded' ? styles.updateReadyBtn : styles.dataBtn} onClick={handleUpdate} disabled={updateBusy} title={updateStatus.message}>
             {updateLabel}
+          </button>
+        )}
+        {salaryGuidanceStatus.state === 'review' && (
+          <button
+            className={styles.salaryAlertBtn}
+            onClick={() => window.electronAPI?.openDbmSalaryGuidance?.()}
+            title={salaryGuidanceStatus.message}
+          >
+            DBM Salary Update
           </button>
         )}
         {import.meta.env.DEV && isDiagnostic && (

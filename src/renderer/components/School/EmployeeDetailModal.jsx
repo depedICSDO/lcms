@@ -13,6 +13,7 @@ import {
   ctoCredits,
   LEAVE_TYPES_NONTEACHING,
   leaveAvailability,
+  mandatoryLeaveCompliance,
 } from "@/utils/leaveCalc";
 import styles from "../HRMO/Modal.module.css";
 
@@ -28,6 +29,7 @@ export default function EmployeeDetailModal({ employee, onClose }) {
   const earned = totalEarned(employee.hired_date);
   const accrualLog = !isTeaching ? generateAccrualLog(employee, 6) : [];
   const protectedVl = protectedVlBalance(employee);
+  const mandatoryCompliance = !isTeaching ? mandatoryLeaveCompliance(employee) : null;
   const annualLeaveTypes = !isTeaching
     ? ['special_privilege', 'mandatory_forced', 'wellness'].map(key =>
         LEAVE_TYPES_NONTEACHING.find(type => type.key === key)).filter(Boolean)
@@ -120,6 +122,11 @@ export default function EmployeeDetailModal({ employee, onClose }) {
               </div>
             </div>
           </div>
+
+          {employee.retirement_date && <div className={`${styles.infoBox} ${styles.infoBoxBlue}`}>
+            <strong>Retirement / resignation documented:</strong> {employee.retirement_date}
+            {employee.retirement_notes ? ` · ${employee.retirement_notes}` : ''}. The year-end mandatory-leave forfeiture is exempt for that calendar year and the event remains in the audit history.
+          </div>}
 
           {isTeaching ? (
             <>
@@ -257,9 +264,10 @@ export default function EmployeeDetailModal({ employee, onClose }) {
                 </div>
               </div>
 
-              <div className={styles.dividerLabel}>Protected VL from Cancelled Mandatory Leave</div>
+              <div className={styles.dividerLabel}>Legacy Protected VL</div>
               <div className={styles.infoBox}>
-                {fmt(protectedVl)} day(s) are usable for leave and retirement, but cannot be monetized.
+                {fmt(protectedVl)} legacy protected day(s) are usable for leave and retirement, but cannot be monetized.
+                New signing-authority cancellations restore the exact deduction to its original regular/protected VL source.
                 At 22 working days per month, this equals {fmt(retirementLeaveMonths(employee))} month(s) of retirement leave.
               </div>
 
@@ -267,6 +275,14 @@ export default function EmployeeDetailModal({ employee, onClose }) {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 14 }}>
                 {annualLeaveTypes.map(type => {
                   const availability = leaveAvailability(type, employee)
+                  if (type.key === 'mandatory_forced') return <div className={styles.balCard} key={type.key}>
+                    <div className={styles.balLabel}>{type.label}</div>
+                    <div className={styles.balVal}>{mandatoryCompliance.retirementExempt ? 'Exempt' : `${fmt(mandatoryCompliance.remaining)} left`}</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>
+                      {fmt(mandatoryCompliance.used)} VL used · {fmt(mandatoryCompliance.authorityCancelled)} authority-cancelled · {fmt(mandatoryCompliance.forfeited)} forfeited
+                      {mandatoryCompliance.monetized > 0 ? ` · ${fmt(mandatoryCompliance.monetized)} monetized` : ''}
+                    </div>
+                  </div>
                   return <div className={styles.balCard} key={type.key}>
                     <div className={styles.balLabel}>{type.label}</div>
                     <div className={styles.balVal}>{fmt(availability.remaining)} left</div>

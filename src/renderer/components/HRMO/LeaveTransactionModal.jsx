@@ -21,7 +21,7 @@ export default function LeaveTransactionModal({ employee, onClose, onSaved }) {
     with_pay: true,
     order_no: '',
     approved_by: '',
-    monetization_option: 'VL25_SL5',
+    monetization_option: 'VL10',
   })
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
@@ -43,7 +43,7 @@ export default function LeaveTransactionModal({ employee, onClose, onSaved }) {
   }
 
   async function handleSave() {
-    const days = form.txn_type === 'MONETIZE' ? 30 : +form.days
+    const days = form.txn_type === 'MONETIZE' ? MONETIZATION_OPTIONS[form.monetization_option].vl : +form.days
     if (!days || isNaN(days) || days <= 0) { setErr('Enter a valid number of days.'); return }
     if (!form.date_from) { setErr('Date from is required.'); return }
     if (form.txn_type === 'MONETIZE') {
@@ -85,7 +85,7 @@ export default function LeaveTransactionModal({ employee, onClose, onSaved }) {
           monetization_note: form.remarks || form.reason || null
         })
         if (monetizationError) throw monetizationError
-        setSuccess(`30 days monetized using ${MONETIZATION_OPTIONS[form.monetization_option].label}.`)
+        setSuccess(`${days} VL days monetized and documented. At least 5 regular VL days remain.`)
         await onSaved?.()
         return
       }
@@ -208,13 +208,14 @@ export default function LeaveTransactionModal({ employee, onClose, onSaved }) {
                   {selectedLeave?.deduction && <div className={styles.infoBox} style={{ gridColumn: '1/-1', margin: 0 }}>
                     <strong>Credit treatment:</strong> {selectedLeave.deduction}
                     {availability.remaining !== null && <>. Remaining this calendar year: <strong>{fmt(availability.remaining)} of {fmt(selectedLeave.annualEntitlement)} days</strong>.</>}
+                    {availability.requirementRemaining !== undefined && <>. Mandatory requirement remaining: <strong>{fmt(availability.requirementRemaining)} day(s)</strong>.</>}
                   </div>}
                   <div className={styles.field}>
                     <label>Number of Days *</label>
-                    <input type="number" min="0.5" step="0.5" value={form.txn_type === 'MONETIZE' ? 30 : form.days} disabled={form.txn_type === 'MONETIZE'} onChange={e => set('days', e.target.value)} placeholder="0.00" />
+                    <input type="number" min="0.5" step="0.5" value={form.txn_type === 'MONETIZE' ? MONETIZATION_OPTIONS[form.monetization_option].vl : form.days} disabled={form.txn_type === 'MONETIZE'} onChange={e => set('days', e.target.value)} placeholder="0.00" />
                   </div>
                   {form.txn_type === 'MONETIZE' && <div className={styles.field}>
-                    <label>30-Day Deduction *</label>
+                    <label>VL Days to Monetize *</label>
                     <select value={form.monetization_option} onChange={e => set('monetization_option', e.target.value)}>
                       {Object.entries(MONETIZATION_OPTIONS).map(([key, option]) => <option key={key} value={key}>{option.label}</option>)}
                     </select>

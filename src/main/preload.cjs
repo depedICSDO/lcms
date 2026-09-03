@@ -3,6 +3,11 @@ const { contextBridge, ipcRenderer } = require('electron')
 contextBridge.exposeInMainWorld('electronAPI', {
   // App
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+  checkDbmSalaryGuidance: () => ipcRenderer.invoke('check-dbm-salary-guidance'),
+  getDbmSalaryGuidanceStatus: () => ipcRenderer.invoke('get-dbm-salary-guidance-status'),
+  openDbmSalaryGuidance: () => ipcRenderer.invoke('open-dbm-salary-guidance'),
+  onDbmSalaryGuidanceStatus: (cb) => ipcRenderer.on('dbm-salary-guidance-status', (_event, payload) => cb(payload)),
+  removeDbmSalaryGuidanceListeners: () => ipcRenderer.removeAllListeners('dbm-salary-guidance-status'),
 
   // Updates
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),

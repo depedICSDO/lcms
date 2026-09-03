@@ -17,7 +17,7 @@ export default function LeaveRequestModal({ employee, onSubmit, onClose }) {
   const [form, setForm] = useState({
     leave_category: isTeaching ? 'vsc' : 'vacation',
     days: '', date_from: '', date_to: '', reason: '', remarks: '', with_pay: true,
-    monetization_option: 'VL25_SL5'
+    monetization_option: 'VL10'
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -29,7 +29,7 @@ export default function LeaveRequestModal({ employee, onSubmit, onClose }) {
 
   async function handleSubmit() {
     const isMonetization = form.leave_category === 'monetization'
-    const days = isMonetization ? 30 : Number(form.days)
+    const days = isMonetization ? MONETIZATION_OPTIONS[form.monetization_option].vl : Number(form.days)
     if (!Number.isFinite(days) || days <= 0) return setError('Enter a valid number of days.')
     if (!form.date_from) return setError('Date from is required.')
     if (form.date_to && form.date_to < form.date_from) return setError('Date to cannot be before date from.')
@@ -94,13 +94,14 @@ export default function LeaveRequestModal({ employee, onSubmit, onClose }) {
                 {selectedLeave?.deduction && <div className={styles.infoBox} style={{ gridColumn: '1/-1', margin: 0 }}>
                   <strong>Credit treatment:</strong> {selectedLeave.deduction}
                   {availability.remaining !== null && <>. Remaining this calendar year: <strong>{fmt(availability.remaining)} of {fmt(selectedLeave.annualEntitlement)} days</strong>.</>}
+                  {availability.requirementRemaining !== undefined && <>. Mandatory requirement remaining: <strong>{fmt(availability.requirementRemaining)} day(s)</strong>.</>}
                 </div>}
                 <div className={styles.field}>
                   <label>Number of Days *</label>
-                  <input type="number" min="0.5" step="0.5" value={form.leave_category === 'monetization' ? 30 : form.days} disabled={form.leave_category === 'monetization'} onChange={event => set('days', event.target.value)} />
+                  <input type="number" min="0.5" step="0.5" value={form.leave_category === 'monetization' ? MONETIZATION_OPTIONS[form.monetization_option].vl : form.days} disabled={form.leave_category === 'monetization'} onChange={event => set('days', event.target.value)} />
                 </div>
                 {form.leave_category === 'monetization' && <div className={styles.field}>
-                  <label>30-Day Deduction *</label>
+                  <label>VL Days to Monetize *</label>
                   <select value={form.monetization_option} onChange={event => set('monetization_option', event.target.value)}>
                     {Object.entries(MONETIZATION_OPTIONS).map(([key, option]) => <option key={key} value={key}>{option.label}</option>)}
                   </select>

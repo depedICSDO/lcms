@@ -3,6 +3,11 @@ import electronUpdater from 'electron-updater'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import {
+  CURRENT_DBM_SALARY_CIRCULAR,
+  DBM_SALARY_GUIDANCE_URL,
+  findNewerDbmSalaryGuidance,
+} from './dbmSalaryGuidance.js'
+import {
   backupDatabase,
   cacheEmployees,
   cacheTransactions,
@@ -30,7 +35,9 @@ app.disableHardwareAcceleration()
 
 let mainWindow
 let updateTimer
+let salaryGuidanceTimer
 let updateStatus = { state: 'idle', message: 'Ready to check for updates.' }
+let salaryGuidanceStatus = { state: 'idle', message: 'Ready to check DBM salary-standardization releases.' }
 const githubReleaseBaseUrl = 'https://github.com/depedICSDO/lcms/releases'
 
 function publishUpdateStatus(nextStatus) {
@@ -53,6 +60,37 @@ async function checkForUpdates(manual = false) {
     publishUpdateStatus({ state: 'error', message: error.message || 'Update check failed.' })
   }
   return updateStatus
+}
+
+async function checkDbmSalaryGuidance() {
+  salaryGuidanceStatus = { state: 'checking', message: 'Checking official DBM salary-standardization releases…' }
+  mainWindow?.webContents.send('dbm-salary-guidance-status', salaryGuidanceStatus)
+  try {
+    const response = await fetch(DBM_SALARY_GUIDANCE_URL, {
+      headers: { 'User-Agent': `LCMS/${app.getVersion()} DBM salary-guidance checker` },
+    })
+    if (!response.ok) throw new Error(`DBM returned HTTP ${response.status}`)
+    const newer = findNewerDbmSalaryGuidance(await response.text(), CURRENT_DBM_SALARY_CIRCULAR)
+    salaryGuidanceStatus = newer
+      ? {
+          state: 'review',
+          sourceUrl: DBM_SALARY_GUIDANCE_URL,
+          message: `New official DBM salary-standardization guidance detected (NBC No. ${newer.circular}${newer.tranche ? `, ${newer.tranche} tranche` : ''}). Verify it before updating employee salaries.`,
+        }
+      : {
+          state: 'current',
+          sourceUrl: DBM_SALARY_GUIDANCE_URL,
+          message: 'Official DBM check complete: NBC No. 601 remains the latest detected salary-standardization schedule.',
+        }
+  } catch (error) {
+    salaryGuidanceStatus = {
+      state: 'unavailable',
+      sourceUrl: DBM_SALARY_GUIDANCE_URL,
+      message: `Could not check official DBM salary-standardization releases: ${error.message}`,
+    }
+  }
+  mainWindow?.webContents.send('dbm-salary-guidance-status', salaryGuidanceStatus)
+  return salaryGuidanceStatus
 }
 
 function createWindow() {
@@ -101,6 +139,8 @@ app.whenReady().then(() => {
     setTimeout(() => checkForUpdates(), 5000)
     updateTimer = setInterval(() => checkForUpdates(), 4 * 60 * 60 * 1000)
   }
+  setTimeout(() => checkDbmSalaryGuidance(), 8000)
+  salaryGuidanceTimer = setInterval(() => checkDbmSalaryGuidance(), 24 * 60 * 60 * 1000)
 })
 
 app.on('window-all-closed', () => {
@@ -109,6 +149,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   if (updateTimer) clearInterval(updateTimer)
+  if (salaryGuidanceTimer) clearInterval(salaryGuidanceTimer)
   closeDatabase()
 })
 
@@ -185,6 +226,9 @@ ipcMain.handle('open-update-release', () => {
 
 // --- App info IPC ---
 ipcMain.handle('get-app-version', () => app.getVersion())
+ipcMain.handle('check-dbm-salary-guidance', () => checkDbmSalaryGuidance())
+ipcMain.handle('get-dbm-salary-guidance-status', () => salaryGuidanceStatus)
+ipcMain.handle('open-dbm-salary-guidance', () => shell.openExternal(DBM_SALARY_GUIDANCE_URL))
 
 // --- Local SQLite data and backup IPC ---
 ipcMain.handle('database:list-employees', (_event, options) => listEmployees(options))

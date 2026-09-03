@@ -138,26 +138,25 @@ export function requiresForcedLeave(employee) {
  * Returns max monetizable days.
  */
 export function maxMonetizable(employee) {
-  if (employeeType(employee) === 'Teaching') {
-    return Math.floor(vscBalance(employee) * 0.5)
-  }
-  const total = regularVlBalance(employee) + slBalance(employee)
-  return Math.floor(total * 0.5)
+  if (employeeType(employee) !== 'Non-Teaching') return 0
+  return Math.max(0, Math.min(30, Math.floor(regularVlBalance(employee) - 5)))
 }
 
-export const MONETIZATION_OPTIONS = {
-  VL25_SL5: { label: '25 VL + 5 SL', vl: 25, sl: 5 },
-  VL30: { label: '30 VL', vl: 30, sl: 0 },
-}
+export const MONETIZATION_OPTIONS = Object.fromEntries(
+  Array.from({ length: 21 }, (_, index) => {
+    const days = index + 10
+    return [`VL${days}`, { label: `${days} VL days`, vl: days, sl: 0 }]
+  })
+)
 
 export function monetizationEligibility(employee, optionKey) {
   if (employeeType(employee) !== 'Non-Teaching') return { eligible: false, reason: 'Only non-teaching employees may use this monetization.' }
   const option = MONETIZATION_OPTIONS[optionKey]
   if (!option) return { eligible: false, reason: 'Select a valid monetization option.' }
   const vl = regularVlBalance(employee)
-  const sl = slBalance(employee)
-  if (vl < option.vl) return { eligible: false, reason: `At least ${option.vl} monetizable VL days are required.` }
-  if (sl < option.sl) return { eligible: false, reason: `At least ${option.sl} SL days are required.` }
+  const alreadyMonetized = annualLeaveUsed(employee, 'Monetization of Leave Credits')
+  if (alreadyMonetized + option.vl > 30) return { eligible: false, reason: `Only ${Math.max(0, 30 - alreadyMonetized)} monetization day(s) remain for this calendar year.` }
+  if (vl - option.vl < 5) return { eligible: false, reason: `Monetization must retain at least 5 regular VL days. Current monetizable VL is ${fmt(vl)}.` }
   return { eligible: true, vl: option.vl, sl: option.sl, total: option.vl + option.sl }
 }
 
@@ -232,6 +231,52 @@ export function annualLeaveUsed(employee, leaveType, refDate = new Date()) {
     .toFixed(2))
 }
 
+function transactionsForYear(employee, refDate = new Date()) {
+  const year = new Date(refDate).getFullYear()
+  if (!Number.isFinite(year)) return []
+  return (employee?.leave_transactions || []).filter(transaction => {
+    const date = new Date(`${String(transaction.date_from || '').slice(0, 10)}T00:00:00`)
+    return !Number.isNaN(date.getTime()) && date.getFullYear() === year
+  })
+}
+
+export function mandatoryLeaveCompliance(employee, refDate = new Date()) {
+  const year = new Date(refDate).getFullYear()
+  const transactions = transactionsForYear(employee, refDate)
+  const vlApplications = transactions
+    .filter(transaction => transaction.txn_type === 'VL_DEBIT')
+    .filter(transaction => ['Vacation Leave (VL)', 'Mandatory / Forced Leave'].includes(transaction.leave_type))
+    .reduce((total, transaction) => total + Math.abs(Number(transaction.days) || 0), 0)
+  const authorityCancelled = transactions
+    .filter(transaction => ['VL_CANCELLATION_CREDIT', 'VL_PROTECTED_CREDIT'].includes(transaction.txn_type))
+    .reduce((total, transaction) => total + Math.abs(Number(transaction.days) || 0), 0)
+  const forfeited = transactions
+    .filter(transaction => transaction.txn_type === 'MANDATORY_FORFEIT')
+    .reduce((total, transaction) => total + Math.abs(Number(transaction.days) || 0), 0)
+  const monetized = transactions
+    .filter(transaction => transaction.txn_type === 'MONETIZE')
+    .reduce((total, transaction) => total + Math.abs(Number(transaction.days) || 0), 0)
+  const retirementDate = employee?.retirement_date ? new Date(`${employee.retirement_date}T00:00:00`) : null
+  const retirementExempt = Boolean(retirementDate && !Number.isNaN(retirementDate.getTime()) && retirementDate.getFullYear() === year)
+  const recordedExemption = transactions.some(transaction => transaction.txn_type === 'MANDATORY_EXEMPT')
+  const actualVlUsed = Math.max(0, vlApplications - authorityCancelled)
+  const requirementApplies = retirementExempt || recordedExemption || vlBalance(employee, refDate) >= 10 || actualVlUsed > 0 || authorityCancelled > 0 || monetized > 0 || forfeited > 0
+  const creditedTowardRequirement = Math.min(MANDATORY_LEAVE_DAYS_PER_YEAR, actualVlUsed + authorityCancelled + forfeited)
+  const remaining = retirementExempt || recordedExemption || !requirementApplies
+    ? 0
+    : Math.max(0, MANDATORY_LEAVE_DAYS_PER_YEAR - creditedTowardRequirement)
+  return {
+    year,
+    required: requirementApplies ? MANDATORY_LEAVE_DAYS_PER_YEAR : 0,
+    used: +actualVlUsed.toFixed(2),
+    authorityCancelled: +authorityCancelled.toFixed(2),
+    forfeited: +forfeited.toFixed(2),
+    monetized: +monetized.toFixed(2),
+    remaining: +remaining.toFixed(2),
+    retirementExempt: retirementExempt || recordedExemption,
+  }
+}
+
 export function annualLeaveRemaining(employee, leaveType, entitlementDays, refDate = new Date()) {
   if (entitlementDays === null || entitlementDays === undefined) return null
   return Math.max(0, +(entitlementDays - annualLeaveUsed(employee, leaveType, refDate)).toFixed(2))
@@ -239,6 +284,10 @@ export function annualLeaveRemaining(employee, leaveType, entitlementDays, refDa
 
 export function leaveAvailability(type, employee, refDate = new Date()) {
   if (!type) return { used: 0, remaining: null }
+  if (type.key === 'mandatory_forced') {
+    const compliance = mandatoryLeaveCompliance(employee, refDate)
+    return { used: compliance.used, remaining: null, requirementRemaining: compliance.remaining, compliance }
+  }
   const used = annualLeaveUsed(employee, type.label, refDate)
   const remaining = annualLeaveRemaining(employee, type.label, type.annualEntitlement, refDate)
   return { used, remaining }
@@ -246,7 +295,7 @@ export function leaveAvailability(type, employee, refDate = new Date()) {
 
 export const LEAVE_TYPES_NONTEACHING = [
   { key: 'vacation', label: 'Vacation Leave (VL)', basis: 'EO 292, Rule XVI, Sec. 51', deduction: 'Deducts from VL balance' },
-  { key: 'mandatory_forced', label: 'Mandatory / Forced Leave', basis: 'EO 292, Rule XVI, Sec. 25', annualEntitlement: MANDATORY_LEAVE_DAYS_PER_YEAR, deduction: '5 days/year; deducts from VL balance' },
+  { key: 'mandatory_forced', label: 'Mandatory / Forced Leave', basis: 'EO 292, Rule XVI, Sec. 25', annualRequirement: MANDATORY_LEAVE_DAYS_PER_YEAR, deduction: 'VL usage counts toward the 5-day annual requirement; any untaken balance is forfeited at year-end' },
   { key: 'sick', label: 'Sick Leave (SL)', basis: 'EO 292, Rule XVI, Sec. 43', deduction: 'Deducts from SL balance' },
   { key: 'maternity', label: 'Maternity Leave', basis: 'RA 11210', deduction: 'Outside VL/SL credits' },
   { key: 'paternity', label: 'Paternity Leave', basis: 'RA 8187', deduction: 'Outside VL/SL credits' },
@@ -259,7 +308,7 @@ export const LEAVE_TYPES_NONTEACHING = [
   { key: 'special_emergency', label: 'Special Emergency (Calamity) Leave', basis: 'CSC MC 2, s. 2012', deduction: 'Outside VL/SL credits' },
   { key: 'adoption', label: 'Adoption Leave', basis: 'RA 11642', deduction: 'Outside VL/SL credits' },
   { key: 'wellness', label: 'Wellness Leave', basis: 'DepEd wellness leave policy', annualEntitlement: WELLNESS_LEAVE_DAYS_PER_YEAR, deduction: '3 days/year; outside VL/SL credits' },
-  { key: 'monetization', label: 'Monetization of Leave Credits', basis: 'CSC MC 41, s. 1998', deduction: 'Deducts 30 days from VL/SL using the selected option' },
+  { key: 'monetization', label: 'Monetization of Leave Credits', basis: 'CSC MC 41, s. 1998, Sec. 22', deduction: 'Standard monetization deducts 10–30 VL days/year and must retain at least 5 VL days' },
   { key: 'cto', label: 'Compensatory Time Off (CTO)', basis: 'Expires one year after grant', deduction: 'Deducts from active CTO grants' },
   { key: 'terminal', label: 'Terminal Leave', basis: 'EO 292 / CSC leave rules', deduction: 'Paid from accumulated VL/SL credits' },
 ]
@@ -290,22 +339,55 @@ export const POSITIONS_TEACHING = [
   'Master Teacher I', 'Master Teacher II', 'Master Teacher III', 'Master Teacher IV', 'Master Teacher V',
 ]
 
-export const POSITIONS_NONTEACHING = [
-  // School administration
+export const POSITIONS_NONTEACHING_SCHOOL = [
   'Principal I', 'Principal II', 'Principal III', 'Principal IV',
   'School Principal I', 'School Principal II', 'School Principal III', 'School Principal IV',
   'Assistant School Principal I', 'Assistant School Principal II',
+  'Administrative Officer I', 'Administrative Officer II',
+  'Project Development Officer I',
+  'Administrative Assistant I', 'Administrative Assistant II',
+  'Administrative Assistant III (Senior Bookkeeper)', 'Administrative Assistant IV', 'Administrative Assistant V',
+  'Administrative Aide I', 'Administrative Aide II', 'Administrative Aide III',
+  'Administrative Aide IV', 'Administrative Aide V', 'Administrative Aide VI',
+  'Accountant I', 'Bookkeeper I', 'Cashier I', 'Disbursing Officer I', 'Disbursing Officer II',
+  'Librarian I', 'Librarian II', 'Registrar I',
+  'School Counselor Associate I', 'Guidance Counselor I', 'Guidance Counselor II',
+  'School Nurse I', 'School Nurse II',
+  'Driver I', 'Driver II', 'Security Guard I', 'Security Guard II',
+  'Utility Worker I', 'Utility Worker II',
+]
 
-  // Division positions currently in use
-  'Information Technology Officer I',
+export const POSITIONS_NONTEACHING_SDO = [
+  'Schools Division Superintendent', 'Assistant Schools Division Superintendent',
+  'Chief Education Supervisor', 'Education Program Supervisor',
   'Public Schools District Supervisor (PSDS)',
-  'Project Development Officer II',
-  'Engineer III',
-  'Medical Officer III',
-  'Dentist I',
-  'Dentist II',
-  'Nurse I',
-  'Nurse II',
-  'Librarian I',
-  'Librarian II',
+  'Attorney III', 'Legal Assistant I', 'Legal Assistant II',
+  'Information Technology Officer I',
+  'Education Program Specialist I', 'Education Program Specialist II', 'Senior Education Program Specialist',
+  'Planning Officer I', 'Planning Officer II', 'Planning Officer III',
+  'Project Development Officer I', 'Project Development Officer II',
+  'Project Development Officer III', 'Project Development Officer IV', 'Statistician I',
+  'Architect II', 'Engineer II', 'Engineer III',
+  'Medical Officer III', 'Dentist I', 'Dentist II', 'Dental Aide',
+  'Nurse I', 'Nurse II', 'Nutritionist-Dietitian I', 'Nutritionist-Dietitian II',
+  'Psychologist I', 'Psychologist II', 'Psychometrician I',
+  'Guidance Services Specialist I', 'Guidance Services Specialist II',
+  'Administrative Officer I', 'Administrative Officer II', 'Administrative Officer III',
+  'Administrative Officer IV', 'Administrative Officer V',
+  'Human Resource Management Officer I', 'Human Resource Management Officer II',
+  'Records Officer I', 'Records Officer II', 'Supply Officer I', 'Supply Officer II',
+  'Budget Officer I', 'Budget Officer II', 'Budget Officer III',
+  'Accountant I', 'Accountant II', 'Accountant III',
+  'Cashier I', 'Cashier II', 'Disbursing Officer I', 'Disbursing Officer II', 'Bookkeeper I',
+  'Administrative Assistant I', 'Administrative Assistant II',
+  'Administrative Assistant III (Senior Bookkeeper)', 'Administrative Assistant IV', 'Administrative Assistant V',
+  'Administrative Aide I', 'Administrative Aide II', 'Administrative Aide III',
+  'Administrative Aide IV', 'Administrative Aide V', 'Administrative Aide VI',
+  'Librarian I', 'Librarian II',
+  'Driver I', 'Driver II', 'Security Guard I', 'Security Guard II',
+  'Utility Worker I', 'Utility Worker II',
+]
+
+export const POSITIONS_NONTEACHING = [
+  ...new Set([...POSITIONS_NONTEACHING_SDO, ...POSITIONS_NONTEACHING_SCHOOL])
 ]

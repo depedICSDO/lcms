@@ -141,7 +141,7 @@ export default function HRMODashboard() {
                           <tr key={request.id}>
                             <td><div className={styles.nameCell}>{request.employee?.last_name}, {request.employee?.first_name}</div><div className={styles.subCell}>{request.school_id}</div></td>
                             <td>{request.requested_by}</td>
-                            <td><div>{request.leave_type}</div>{request.monetization_option && <div className={styles.subCell}>{request.monetization_option === 'VL30' ? '30 VL' : '25 VL + 5 SL'}</div>}</td>
+                            <td><div>{request.leave_type}</div>{request.monetization_option && <div className={styles.subCell}>{request.monetization_option.replace('VL', '')} VL days</div>}</td>
                             <td>{request.date_from}{request.date_to !== request.date_from ? ` – ${request.date_to}` : ''}</td>
                             <td>{fmt(request.days)}</td>
                             <td>{request.reason || '—'}</td>

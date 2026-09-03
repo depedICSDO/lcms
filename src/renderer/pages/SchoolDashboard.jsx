@@ -20,11 +20,11 @@ export default function SchoolDashboard() {
     ctoExpiryWarnings(employee).map(credit => ({ employee, credit })))
 
   async function cancelMandatory(request) {
-    const reason = window.prompt('Reason the employee cancelled this mandatory/forced leave:')
+    const reason = window.prompt('Document why the signing authority cancelled this scheduled mandatory/forced leave due to exigency of service:')
     if (reason === null) return
     const result = await cancelMandatoryRequest(request.id, reason)
     setActionMessage(result.success
-      ? 'Mandatory leave cancelled. The days were restored as protected, non-monetizable VL.'
+      ? 'Authority cancellation documented. The exact VL deduction was restored and the scheduled days will not be forfeited at year-end.'
       : `Cancellation failed: ${result.error}`)
   }
 
@@ -86,7 +86,7 @@ export default function SchoolDashboard() {
                           <td><span className={`${styles.pill} ${request.status === 'approved' ? styles.pillOk : ['rejected', 'cancelled'].includes(request.status) ? styles.pillReject : styles.pillWarn}`}>{request.status}</span></td>
                           <td className={styles.subCell}>{request.cancellation_reason || request.rejection_reason || (request.form6_confirmed ? 'CS Form 6 confirmed' : 'Awaiting review')}</td>
                           <td>{request.status === 'approved' && request.leave_category === 'mandatory_forced'
-                            ? <button className={styles.btnDangerSm} onClick={() => cancelMandatory(request)}>Cancel mandatory leave</button>
+                            ? <button className={styles.btnDangerSm} onClick={() => cancelMandatory(request)}>Record authority cancellation</button>
                             : '—'}</td>
                         </tr>
                       ))}

@@ -103,10 +103,17 @@ npm run dist
 | Non-Teaching SL | 1.25 days/month (15 days/year) | CSC MC 41, s. 1998 |
 | Teaching VSC | HRMO-encoded; max 15/30/45 days by years of service | DepEd Order 013, s. 2024 |
 | Teaching VL/SL | NOT entitled | CSC MC 41 s.1998 / RA 4670 |
-| Mandatory / Forced Leave | 5 days/year, deducted from accumulated VL | CSC MC 41 s.1998 Sec. 25 |
+| Mandatory / Forced Leave | Any VL usage counts toward the 5-day annual minimum; untaken required days are forfeited at year-end | CSC MC 41 s.1998 Sec. 25 |
 | Special Privilege Leave | 3 days/year, outside accumulated VL/SL | EO 292, Rule XVI, Sec. 21 |
-| Monetization | Up to 50% of accumulated credits | CSC MC 2, s. 2016 |
+| Standard Monetization | 10–30 VL days/year; retain at least 5 VL days | CSC MC 41, s. 1998, Sec. 22 |
 | Wellness Leave | 3 days/year, outside accumulated VL/SL | DepEd wellness leave policy |
+
+The year-end mandatory-leave job runs through Supabase Cron every January 1.
+A signing-authority cancellation due to exigency of service is documented and
+the exact original VL deduction is restored. A documented retirement/resignation
+date exempts the employee from that calendar year's automatic forfeiture and
+creates an audit-history entry. Monetization remains visible in the same leave
+transaction history and does not count as mandatory leave taken.
 
 ---
 

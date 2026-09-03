@@ -7,7 +7,8 @@ const REQUEST_SELECT = `
   employee:leave_employees!employee_id (
     id, employee_no, first_name, middle_name, last_name, position,
     emp_type, school_id, vl_used, sl_used, vl_override, sl_override,
-    vsc_balance, vsc_used, hired_date, protected_vl_balance
+    vsc_balance, vsc_used, hired_date, protected_vl_balance,
+    retirement_date, retirement_notes
   )
 `
 
@@ -93,7 +94,7 @@ export function useLeaveRequests() {
   async function cancelMandatoryRequest(id, reason) {
     const { error: cancellationError } = await supabase.rpc('lcms_cancel_mandatory_leave', {
       request_uuid: id,
-      cancellation_note: reason || 'Cancelled by employee'
+      cancellation_note: reason || 'Cancelled by signing authority due to exigency of service'
     })
     if (cancellationError) return { success: false, error: cancellationError.message }
     await fetchRequests({ silent: true })
