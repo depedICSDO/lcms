@@ -1,5 +1,6 @@
 import { createRequire } from 'module'
 import { readFileSync } from 'fs'
+import os from 'os'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import crypto from 'crypto'
@@ -17,7 +18,19 @@ const { SCHOOLS } = await import(
   path.join(projectRoot, 'src/renderer/utils/schools.js').replace(/\\/g, '/').replace(/^([A-Za-z]):/, '/$1:').replace(/^/, 'file://')
 )
 
-const DB_PATH = 'C:\\Users\\jaybh\\AppData\\Roaming\\leave-credits-management-system\\leave-credits.sqlite'
+// Mirrors Electron's own default app.getPath('userData') resolution
+// (appData/<package name>) so this works on any machine/account without a
+// hardcoded path. Override with LCMS_DB_PATH if the app's local DB lives
+// somewhere non-default.
+function defaultUserDataDir(appName) {
+  const home = os.homedir()
+  if (process.platform === 'win32') return path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), appName)
+  if (process.platform === 'darwin') return path.join(home, 'Library', 'Application Support', appName)
+  return path.join(process.env.XDG_CONFIG_HOME || path.join(home, '.config'), appName)
+}
+
+const { name: appName } = JSON.parse(readFileSync(path.join(projectRoot, 'package.json'), 'utf-8'))
+const DB_PATH = process.env.LCMS_DB_PATH || path.join(defaultUserDataDir(appName), 'leave-credits.sqlite')
 const DRY_RUN = process.argv.includes('--dry-run')
 
 // Office (school) name -> DepEd School ID, for the files with unambiguous
