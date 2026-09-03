@@ -82,6 +82,27 @@
   color: var(--sdo-blue);
 }
 
+.fieldHint {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  margin-top: 4px;
+  padding: 5px 8px;
+  background: var(--info-bg);
+  border: 0.5px solid var(--info-border);
+  border-radius: 6px;
+  color: var(--info-text);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.fieldHint::before {
+  content: 'ℹ';
+  flex: none;
+  font-weight: 700;
+}
+
 .salaryGuidanceWarning {
   margin-top: 3px;
   color: var(--warning);

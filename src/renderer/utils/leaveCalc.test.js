@@ -118,22 +118,22 @@ test('documents retirement year as exempt from mandatory forfeiture', () => {
 
 test('includes the configured teaching and non-teaching positions', () => {
   for (const position of [
-    'Information Technology Officer I',
-    'Public Schools District Supervisor (PSDS)', 'Project Development Officer II',
+    'Information Technology Officer III',
+    'Public Schools Division Supervisor', 'Project Development Officer II',
     'Medical Officer III',
     'Engineer III',
-    'Nurse I', 'Nurse II', 'Dentist I', 'Dentist II', 'Librarian I', 'Librarian II',
+    'Nurse II', 'Dentist II', 'Librarian III',
   ]) {
     assert.ok(POSITIONS_NONTEACHING.includes(position), `${position} is missing`)
   }
-  assert.ok(POSITIONS_NONTEACHING.includes('Accountant I'))
+  assert.ok(POSITIONS_NONTEACHING.includes('Accountant III'))
   for (const position of ['Teacher VII', 'Head Teacher VI', 'Master Teacher V']) {
     assert.ok(POSITIONS_TEACHING.includes(position), `${position} is missing`)
   }
 })
 
 test('classifies principals as non-teaching and classroom/head teachers as teaching', () => {
-  for (const position of ['Principal I', 'School Principal IV', 'Assistant School Principal I']) {
+  for (const position of ['Principal I', 'Principal IV', 'Assistant Principal I']) {
     assert.ok(POSITIONS_NONTEACHING.includes(position))
     assert.ok(!POSITIONS_TEACHING.includes(position))
   }

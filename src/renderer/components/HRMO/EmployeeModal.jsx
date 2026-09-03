@@ -333,15 +333,15 @@ export default function EmployeeModal({ employee, onSave, onClose }) {
           <div className={styles.grid3}>
             <div className={styles.field}>
               <label>Last Name *</label>
-              <input value={form.last_name} onChange={e => set('last_name', e.target.value)} placeholder="Dela Cruz" />
+              <input value={form.last_name} onChange={e => set('last_name', e.target.value.toUpperCase())} placeholder="DELA CRUZ" />
             </div>
             <div className={styles.field}>
               <label>First Name *</label>
-              <input value={form.first_name} onChange={e => set('first_name', e.target.value)} placeholder="Juan" />
+              <input value={form.first_name} onChange={e => set('first_name', e.target.value.toUpperCase())} placeholder="JUAN" />
             </div>
             <div className={styles.field}>
               <label>Middle Name</label>
-              <input value={form.middle_name} onChange={e => set('middle_name', e.target.value)} placeholder="Santos" />
+              <input value={form.middle_name} onChange={e => set('middle_name', e.target.value.toUpperCase())} placeholder="SANTOS" />
             </div>
           </div>
           <div className={styles.grid2}>
@@ -408,10 +408,19 @@ export default function EmployeeModal({ employee, onSave, onClose }) {
             </div>
             <div className={styles.field}>
               <label>Step Increment Method</label>
-              <select value={form.salary_step_mode} onChange={e => selectSalaryStepMode(e.target.value)}>
+              <select
+                value={form.salary_step_mode}
+                onChange={e => selectSalaryStepMode(e.target.value)}
+                title="Controls how the salary step within the grade is set: computed from time-in-position, or chosen by HRMO."
+              >
                 <option value="automatic">Automatic — every 3 qualifying years</option>
                 <option value="manual">Manual — HRMO selects the step</option>
               </select>
+              <div className={styles.fieldHint}>
+                {form.salary_step_mode === 'automatic'
+                  ? 'Step is computed from the Current Position Start Date. Use Manual for withheld increments or other exceptions.'
+                  : 'HRMO sets the step directly. Switch to Automatic to let the system compute it from time-in-position instead.'}
+              </div>
             </div>
             <div className={styles.field}>
               <label>Current Position Start Date</label>
@@ -445,8 +454,8 @@ export default function EmployeeModal({ employee, onSave, onClose }) {
             </div>
           </div>
 
-          {/* Teaching section */}
-          {form.emp_type === 'Teaching' && (
+          {/* Teaching section — VSC is HRMO-encoded after the record exists, not at creation */}
+          {form.emp_type === 'Teaching' && isEdit && (
             <>
               <div className={styles.dividerLabel}>Vacation Service Credits (VSC) — DepEd Order 013, s. 2024</div>
               <div className={styles.infoBox}>
