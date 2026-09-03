@@ -217,6 +217,21 @@ export function fmt(n) {
   return (+n).toFixed(2)
 }
 
+/** Formats an ISO (YYYY-MM-DD) or other parseable date string as MM/DD/YYYY for display. */
+export function fmtDate(value) {
+  if (!value) return '—'
+  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(value)
+  if (isoMatch) {
+    const [, y, m, d] = isoMatch
+    return `${m}/${d}/${y}`
+  }
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return String(value)
+  const m = String(parsed.getMonth() + 1).padStart(2, '0')
+  const d = String(parsed.getDate()).padStart(2, '0')
+  return `${m}/${d}/${parsed.getFullYear()}`
+}
+
 /** Approved/recorded usage of a leave type in the calendar year containing refDate. */
 export function annualLeaveUsed(employee, leaveType, refDate = new Date()) {
   const year = new Date(refDate).getFullYear()

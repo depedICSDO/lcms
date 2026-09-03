@@ -1,13 +1,12 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
-import electronUpdater from 'electron-updater'
-import path from 'path'
-import { fileURLToPath } from 'url'
-import {
+const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron')
+const { autoUpdater } = require('electron-updater')
+const path = require('path')
+const {
   CURRENT_DBM_SALARY_CIRCULAR,
   DBM_SALARY_GUIDANCE_URL,
   findNewerDbmSalaryGuidance,
-} from './dbmSalaryGuidance.js'
-import {
+} = require('./dbmSalaryGuidance.cjs')
+const {
   backupDatabase,
   cacheEmployees,
   cacheTransactions,
@@ -21,13 +20,7 @@ import {
   resolvePendingChange,
   restoreDatabase,
   saveEmployee
-} from './database.js'
-
-const { autoUpdater } = electronUpdater
-
-// In ES Modules, __dirname is not available by default, define it like this:
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
+} = require('./database.cjs')
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
 

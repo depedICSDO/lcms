@@ -53,29 +53,47 @@ export async function recordLocalLeave(transaction, employee) {
   await api().recordLocalLeave({ transaction, employee })
 }
 
+const SYNC_BATCH_SIZE = 200
+
 export async function syncPendingChanges() {
   if (!hasLocalDatabase() || !navigator.onLine) return { synced: 0, pending: 0 }
 
   const changes = await api().getPendingChanges()
   let synced = 0
 
-  for (const change of changes) {
+  // Employee upserts are the bulk case (e.g. a mass roster import) — push them
+  // in batched requests instead of one network round-trip per record, which
+  // would otherwise take minutes for anything past a few dozen changes.
+  const employeeUpserts = changes.filter(c => c.entity_type === 'employee' && c.operation === 'upsert')
+  const otherChanges = changes.filter(c => !(c.entity_type === 'employee' && c.operation === 'upsert'))
+
+  for (let i = 0; i < employeeUpserts.length; i += SYNC_BATCH_SIZE) {
+    const batch = employeeUpserts.slice(i, i + SYNC_BATCH_SIZE)
+    const payloads = batch.map(change => {
+      const { cto_credits: _localCtoCredits, leave_transactions: _localTransactions, ...employeePayload } = change.payload
+      return employeePayload
+    })
+    try {
+      const { data, error } = await supabase.from('leave_employees').upsert(payloads, { onConflict: 'id' }).select()
+      if (error) throw error
+      const dataById = new Map((data || []).map(row => [row.id, row]))
+      for (const change of batch) {
+        try {
+          await api().resolvePendingChange({ queueId: change.id, entity: { type: 'employee', data: dataById.get(change.payload.id) } })
+          synced += 1
+        } catch {
+          // Keep this one queued for the next synchronization.
+        }
+      }
+    } catch {
+      // Keep the whole batch queued for the next online synchronization.
+    }
+  }
+
+  for (const change of otherChanges) {
     try {
       let entity
-      if (change.entity_type === 'employee' && change.operation === 'upsert') {
-        const {
-          cto_credits: _localCtoCredits,
-          leave_transactions: _localTransactions,
-          ...employeePayload
-        } = change.payload
-        const { data, error } = await supabase
-          .from('leave_employees')
-          .upsert(employeePayload, { onConflict: 'id' })
-          .select()
-          .single()
-        if (error) throw error
-        entity = { type: 'employee', data }
-      } else if (change.entity_type === 'employee' && change.operation === 'delete') {
+      if (change.entity_type === 'employee' && change.operation === 'delete') {
         const { error } = await supabase.from('leave_employees').delete().eq('id', change.entity_id)
         if (error) throw error
       } else if (change.entity_type === 'transaction' && change.operation === 'insert') {

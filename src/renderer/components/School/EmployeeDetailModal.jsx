@@ -7,6 +7,7 @@ import {
   vscMaxDays,
   generateAccrualLog,
   fmt,
+  fmtDate,
   protectedVlBalance,
   retirementLeaveMonths,
   ctoBalance,
@@ -115,7 +116,7 @@ export default function EmployeeDetailModal({ employee, onClose }) {
           >
             <div className={styles.balCard}>
               <div className={styles.balLabel}>Date Hired</div>
-              <div style={{ fontWeight: 500 }}>{employee.hired_date}</div>
+              <div style={{ fontWeight: 500 }}>{fmtDate(employee.hired_date)}</div>
             </div>
             <div className={styles.balCard}>
               <div className={styles.balLabel}>Employee No.</div>
@@ -126,7 +127,7 @@ export default function EmployeeDetailModal({ employee, onClose }) {
           </div>
 
           {employee.retirement_date && <div className={`${styles.infoBox} ${styles.infoBoxBlue}`}>
-            <strong>Retirement / resignation documented:</strong> {employee.retirement_date}
+            <strong>Retirement / resignation documented:</strong> {fmtDate(employee.retirement_date)}
             {employee.retirement_notes ? ` · ${employee.retirement_notes}` : ''}. The year-end mandatory-leave forfeiture is exempt for that calendar year and the event remains in the audit history.
           </div>}
 
@@ -346,9 +347,9 @@ export default function EmployeeDetailModal({ employee, onClose }) {
           <div className={styles.infoBox}>Active balance: <strong>{fmt(ctoBalance(employee))} day(s)</strong>. Each grant is automatically forfeited on its one-year expiration date.</div>
           {ctoCredits(employee).filter(credit => credit.remaining_days > 0).map(credit => (
             <div key={credit.id || credit.expires_on} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '0.5px solid var(--border)', fontSize: 12, background: !credit.expired && credit.daysUntilExpiry <= 14 ? 'var(--danger-bg)' : 'transparent' }}>
-              <span>{fmt(credit.remaining_days)} day(s) · Credited {credit.granted_on || '—'}</span>
+              <span>{fmt(credit.remaining_days)} day(s) · Credited {fmtDate(credit.granted_on)}</span>
               <span style={{ color: credit.expired || credit.daysUntilExpiry <= 14 ? 'var(--danger)' : 'var(--text-secondary)', fontWeight: credit.daysUntilExpiry <= 14 ? 600 : 400 }}>
-                {credit.expired ? 'Forfeited' : `Expires ${credit.expires_on}${credit.daysUntilExpiry <= 14 ? ` (${credit.daysUntilExpiry} day(s) left)` : ''}`}
+                {credit.expired ? 'Forfeited' : `Expires ${fmtDate(credit.expires_on)}${credit.daysUntilExpiry <= 14 ? ` (${credit.daysUntilExpiry} day(s) left)` : ''}`}
               </span>
             </div>
           ))}
@@ -365,11 +366,11 @@ export default function EmployeeDetailModal({ employee, onClose }) {
                   : transactions.map(transaction => {
                       const days = Number(transaction.days || 0)
                       return <tr key={transaction.id} style={{ borderTop: '0.5px solid var(--border)' }}>
-                        <td style={{ padding: 6 }}>{String(transaction.created_at || '').slice(0, 10) || '—'}</td>
+                        <td style={{ padding: 6 }}>{fmtDate(transaction.created_at)}</td>
                         <td style={{ padding: 6 }}>{transaction.leave_type || '—'}</td>
                         <td style={{ padding: 6 }}>{transaction.txn_type?.replaceAll('_', ' ') || '—'}</td>
                         <td style={{ padding: 6, textAlign: 'right', color: days < 0 ? 'var(--danger)' : 'var(--success)' }}>{days > 0 ? '+' : ''}{fmt(days)}</td>
-                        <td style={{ padding: 6 }}>{transaction.date_from || '—'}{transaction.date_to && transaction.date_to !== transaction.date_from ? ` – ${transaction.date_to}` : ''}</td>
+                        <td style={{ padding: 6 }}>{transaction.date_from ? fmtDate(transaction.date_from) : '—'}{transaction.date_to && transaction.date_to !== transaction.date_from ? ` – ${fmtDate(transaction.date_to)}` : ''}</td>
                         <td style={{ padding: 6 }}>{transaction.remarks || transaction.reason || '—'}</td>
                       </tr>
                     })}

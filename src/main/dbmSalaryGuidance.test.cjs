@@ -1,6 +1,6 @@
-import test from 'node:test'
-import assert from 'node:assert/strict'
-import { findNewerDbmSalaryGuidance } from './dbmSalaryGuidance.js'
+const test = require('node:test')
+const assert = require('node:assert/strict')
+const { findNewerDbmSalaryGuidance } = require('./dbmSalaryGuidance.cjs')
 
 test('detects a newer DBM salary schedule circular', () => {
   const html = `

@@ -1,7 +1,7 @@
-import Database from 'better-sqlite3'
-import { app, dialog } from 'electron'
-import fs from 'fs'
-import path from 'path'
+const { app, dialog } = require('electron')
+const fs = require('fs')
+const path = require('path')
+const Database = require('better-sqlite3')
 
 // Keep this legacy internal ID and filename stable so existing LCMS backups and
 // installations remain compatible after the product-title rename.
@@ -80,14 +80,14 @@ function migrate(connection) {
   `).run()
 }
 
-export function initializeDatabase() {
+function initializeDatabase() {
   databasePath = path.join(app.getPath('userData'), DATABASE_FILENAME)
   db = openDatabase(databasePath)
   migrate(db)
   return databasePath
 }
 
-export function closeDatabase() {
+function closeDatabase() {
   if (db?.open) db.close()
   db = undefined
 }
@@ -130,7 +130,7 @@ function writeEmployee(connection, employee, shouldQueue) {
   if (shouldQueue) queueChange(connection, 'employee', employee.id, 'upsert', employee)
 }
 
-export function listEmployees({ schoolId } = {}) {
+function listEmployees({ schoolId } = {}) {
   const connection = requireDatabase()
   const rows = schoolId
     ? connection.prepare('SELECT payload FROM employees WHERE school_id = ? ORDER BY last_name').all(schoolId)
@@ -138,13 +138,13 @@ export function listEmployees({ schoolId } = {}) {
   return rows.map(row => deserialize(row.payload))
 }
 
-export function saveEmployee(employee, shouldQueue = true) {
+function saveEmployee(employee, shouldQueue = true) {
   const connection = requireDatabase()
   connection.transaction(() => writeEmployee(connection, employee, shouldQueue))()
   return employee
 }
 
-export function cacheEmployees({ employees, schoolId }) {
+function cacheEmployees({ employees, schoolId }) {
   const connection = requireDatabase()
   connection.transaction((records, scopeSchoolId) => {
     const remoteIds = new Set(records.map(employee => employee.id))
@@ -167,7 +167,7 @@ export function cacheEmployees({ employees, schoolId }) {
   return employees.length
 }
 
-export function cacheTransactions({ transactions, schoolId }) {
+function cacheTransactions({ transactions, schoolId }) {
   const connection = requireDatabase()
   connection.transaction((records, scopeSchoolId) => {
     const remoteIds = new Set(records.map(transaction => transaction.id))
@@ -203,7 +203,7 @@ export function cacheTransactions({ transactions, schoolId }) {
   return transactions.length
 }
 
-export function listTransactions({ schoolId } = {}) {
+function listTransactions({ schoolId } = {}) {
   const connection = requireDatabase()
   const rows = schoolId
     ? connection.prepare('SELECT payload FROM leave_transactions WHERE school_id = ? ORDER BY created_at DESC').all(schoolId)
@@ -211,7 +211,7 @@ export function listTransactions({ schoolId } = {}) {
   return rows.map(row => deserialize(row.payload))
 }
 
-export function deleteEmployee(id, shouldQueue = true) {
+function deleteEmployee(id, shouldQueue = true) {
   const connection = requireDatabase()
   connection.transaction(() => {
     connection.prepare('DELETE FROM employees WHERE id = ?').run(id)
@@ -219,7 +219,7 @@ export function deleteEmployee(id, shouldQueue = true) {
   })()
 }
 
-export function recordLeaveTransaction(transaction, employee) {
+function recordLeaveTransaction(transaction, employee) {
   const connection = requireDatabase()
   connection.transaction(() => {
     writeEmployee(connection, employee, true)
@@ -238,7 +238,7 @@ export function recordLeaveTransaction(transaction, employee) {
   })()
 }
 
-export function getPendingChanges() {
+function getPendingChanges() {
   return requireDatabase().prepare(`
     SELECT id, entity_type, entity_id, operation, payload, created_at
     FROM sync_queue ORDER BY id
@@ -248,7 +248,7 @@ export function getPendingChanges() {
   }))
 }
 
-export function resolvePendingChange({ queueId, entity }) {
+function resolvePendingChange({ queueId, entity }) {
   const connection = requireDatabase()
   connection.transaction(() => {
     if (entity) {
@@ -292,7 +292,7 @@ function removeDatabaseSidecars(filePath) {
   }
 }
 
-export async function backupDatabase() {
+async function backupDatabase() {
   const connection = requireDatabase()
   const stamp = new Date().toISOString().slice(0, 10)
   const result = await dialog.showSaveDialog({
@@ -311,7 +311,7 @@ export async function backupDatabase() {
   return { success: true, filePath: result.filePath }
 }
 
-export async function restoreDatabase() {
+async function restoreDatabase() {
   requireDatabase()
   const result = await dialog.showOpenDialog({
     title: 'Restore LCMS Database',
@@ -351,4 +351,20 @@ export async function restoreDatabase() {
   }, 500)
 
   return { success: true, safetyPath, restarting: true }
+}
+
+module.exports = {
+  initializeDatabase,
+  closeDatabase,
+  listEmployees,
+  saveEmployee,
+  cacheEmployees,
+  cacheTransactions,
+  listTransactions,
+  deleteEmployee,
+  recordLeaveTransaction,
+  getPendingChanges,
+  resolvePendingChange,
+  backupDatabase,
+  restoreDatabase
 }

@@ -6,3 +6,8 @@ dist-electron/
 .DS_Store
 Thumbs.db
 release/
+
+# PSIPOP source documents and parsed data contain employee PII (TIN, birth date,
+# salary) — never commit these.
+scripts/psipop_parsed.json
+src/08 AUGUST 2026/

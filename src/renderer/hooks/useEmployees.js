@@ -13,6 +13,24 @@ import {
 } from '@/utils/dataStore'
 import { useAuth } from './useAuth'
 
+// Supabase/PostgREST caps an unpaginated select() at 1000 rows by default —
+// page through with .range() so tables past that size (like leave_employees
+// now, at ~1,800 rows) still return in full.
+const PAGE_SIZE = 1000
+
+async function fetchAllRows(buildQuery) {
+  let all = []
+  let from = 0
+  while (true) {
+    const { data, error } = await buildQuery().range(from, from + PAGE_SIZE - 1)
+    if (error) return { data: null, error }
+    all = all.concat(data || [])
+    if (!data || data.length < PAGE_SIZE) break
+    from += PAGE_SIZE
+  }
+  return { data: all, error: null }
+}
+
 export function useEmployees() {
   const { user } = useAuth()
   const [employees, setEmployees] = useState([])
@@ -35,34 +53,30 @@ export function useEmployees() {
         await syncPendingChanges()
       }
 
-      let query = supabase
-        .from('leave_employees')
-        .select('*')
-        .order('last_name', { ascending: true })
+      const isAoiiScoped = user?.role === 'aoii' && !user?.diagnostic && user?.school_id
 
       // AOII sees only their school; HRMO sees all
-      if (user?.role === 'aoii' && !user?.diagnostic && user?.school_id) {
-        query = query.eq('school_id', user.school_id)
-      }
-
-      const { data, error: err } = await query
+      const { data, error: err } = await fetchAllRows(() => {
+        let query = supabase.from('leave_employees').select('*').order('last_name', { ascending: true })
+        if (isAoiiScoped) query = query.eq('school_id', user.school_id)
+        return query
+      })
       if (err) throw err
       let employeesWithCto = data || []
-      const { data: ctoRows, error: ctoError } = await supabase
-        .from('leave_cto_credits')
-        .select('*')
-        .order('expires_on', { ascending: true })
+      const { data: ctoRows, error: ctoError } = await fetchAllRows(() =>
+        supabase.from('leave_cto_credits').select('*').order('expires_on', { ascending: true })
+      )
       if (!ctoError) {
         employeesWithCto = employeesWithCto.map(employee => ({
           ...employee,
           cto_credits: (ctoRows || []).filter(credit => credit.employee_id === employee.id)
         }))
       }
-      let transactionQuery = supabase.from('leave_transactions').select('*').order('created_at', { ascending: false })
-      if (user?.role === 'aoii' && !user?.diagnostic && user?.school_id) {
-        transactionQuery = transactionQuery.eq('school_id', user.school_id)
-      }
-      const { data: transactions, error: transactionError } = await transactionQuery
+      const { data: transactions, error: transactionError } = await fetchAllRows(() => {
+        let transactionQuery = supabase.from('leave_transactions').select('*').order('created_at', { ascending: false })
+        if (isAoiiScoped) transactionQuery = transactionQuery.eq('school_id', user.school_id)
+        return transactionQuery
+      })
       if (!transactionError) {
         employeesWithCto = employeesWithCto.map(employee => ({
           ...employee,

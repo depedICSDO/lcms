@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useEmployees } from '@/hooks/useEmployees'
 import { useLeaveRequests } from '@/hooks/useLeaveRequests'
-import { ctoBalance, ctoExpiryWarnings, vlBalance, slBalance, vscBalance, fmt, yearsOfService, totalEarned } from '@/utils/leaveCalc'
+import { ctoBalance, ctoExpiryWarnings, vlBalance, slBalance, vscBalance, fmt, fmtDate, yearsOfService, totalEarned } from '@/utils/leaveCalc'
 import EmployeeDetailModal from '@/components/School/EmployeeDetailModal'
 import LeaveRequestModal from '@/components/School/LeaveRequestModal'
 import styles from './Dashboard.module.css'
@@ -60,7 +60,7 @@ export default function SchoolDashboard() {
 
       {ctoWarnings.length > 0 && <div className={`${styles.infoBox} ${styles.infoBoxDanger}`} role="alert">
         <strong>CTO expires within 14 days:</strong> {ctoWarnings.map(({ employee, credit }) =>
-          `${employee.last_name}, ${employee.first_name}: ${fmt(credit.remaining_days)} day(s), credited ${credit.granted_on}, expires ${credit.expires_on}`
+          `${employee.last_name}, ${employee.first_name}: ${fmt(credit.remaining_days)} day(s), credited ${fmtDate(credit.granted_on)}, expires ${fmtDate(credit.expires_on)}`
         ).join(' • ')}
       </div>}
 
@@ -81,7 +81,7 @@ export default function SchoolDashboard() {
                         <tr key={request.id}>
                           <td>{request.employee?.last_name}, {request.employee?.first_name}</td>
                           <td>{request.leave_type}</td>
-                          <td>{request.date_from}{request.date_to !== request.date_from ? ` – ${request.date_to}` : ''}</td>
+                          <td>{fmtDate(request.date_from)}{request.date_to !== request.date_from ? ` – ${fmtDate(request.date_to)}` : ''}</td>
                           <td>{fmt(request.days)}</td>
                           <td><span className={`${styles.pill} ${request.status === 'approved' ? styles.pillOk : ['rejected', 'cancelled'].includes(request.status) ? styles.pillReject : styles.pillWarn}`}>{request.status}</span></td>
                           <td className={styles.subCell}>{request.cancellation_reason || request.rejection_reason || (request.form6_confirmed ? 'CS Form 6 confirmed' : 'Awaiting review')}</td>
@@ -137,7 +137,7 @@ export default function SchoolDashboard() {
                           <tr key={employee.id}>
                             <td><button className={styles.nameButton} onClick={() => setDetail(employee)}>{employee.last_name}, {employee.first_name}</button><div className={styles.subCell}>{employee.position}</div></td>
                             <td><span className={`${styles.pill} ${employee.emp_type === 'Teaching' ? styles.pillTeaching : styles.pillNT}`}>{employee.emp_type === 'Teaching' ? 'VSC/PVP' : 'VL+SL'}</span></td>
-                            <td className={styles.subCell}>{employee.hired_date}</td>
+                            <td className={styles.subCell}>{fmtDate(employee.hired_date)}</td>
                             <td className={styles.subCell}>{yearsOfService(employee.hired_date)} year(s)</td>
                             <td className={`${styles.creditCell} ${styles.maroon}`}>{fmt(vl)}</td>
                             <td className={styles.creditCell}>{sl === null ? '—' : fmt(sl)}</td>

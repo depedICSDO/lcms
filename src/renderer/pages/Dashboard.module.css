@@ -9,7 +9,7 @@
 
 .statsRow {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 10px;
 }
 .statCard {
@@ -56,7 +56,8 @@
   flex-shrink: 0;
 }
 .toolbar select { max-width: 160px; flex: none; height: 32px; font-size: 12px; }
-.searchInput { flex: 1; height: 32px; font-size: 13px; }
+.toolbar select.schoolSelect { max-width: 260px; }
+.searchInput { flex: 1 1 220px; max-width: 360px; height: 32px; font-size: 13px; }
 
 .tableWrap { overflow: auto; flex: 1; }
 
@@ -80,6 +81,9 @@
 }
 .table tr:last-child td { border-bottom: none; }
 .table tr:hover td { background: var(--maroon-bg); }
+
+.centeredTable th:not(:first-child),
+.centeredTable td:not(:first-child) { text-align: center; }
 
 .nameCell { font-size: 13px; font-weight: 500; }
 .nameButton {

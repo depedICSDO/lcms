@@ -2,13 +2,13 @@ import { useState } from 'react'
 import { useEmployees } from '@/hooks/useEmployees'
 import { useLeaveRequests } from '@/hooks/useLeaveRequests'
 import {
-  ctoBalance, ctoExpiryWarnings, vlBalance, slBalance, vscBalance, fmt,
+  ctoBalance, ctoExpiryWarnings, vlBalance, slBalance, vscBalance, fmt, fmtDate,
   yearsOfService, requiresForcedLeave
 } from '@/utils/leaveCalc'
 import EmployeeModal from '@/components/HRMO/EmployeeModal'
 import LeaveTransactionModal from '@/components/HRMO/LeaveTransactionModal'
 import EmployeeDetailModal from '@/components/School/EmployeeDetailModal'
-import { schoolNameById } from '@/utils/schools'
+import { SCHOOLS, schoolNameById } from '@/utils/schools'
 import styles from './Dashboard.module.css'
 
 export default function HRMODashboard() {
@@ -16,6 +16,7 @@ export default function HRMODashboard() {
   const { requests, loading: requestsLoading, error: requestsError, approveRequest, rejectRequest } = useLeaveRequests()
   const [search, setSearch]           = useState('')
   const [typeFilter, setTypeFilter]   = useState('')
+  const [schoolFilter, setSchoolFilter] = useState('')
   const [sortBy, setSortBy]           = useState('name_asc')
   const [showAdd, setShowAdd]         = useState(false)
   const [editTarget, setEditTarget]   = useState(null)
@@ -62,7 +63,8 @@ export default function HRMODashboard() {
     const name = `${e.last_name} ${e.first_name}`.toLowerCase()
     return (
       (!q || name.includes(q) || (e.employee_no || '').toLowerCase().includes(q)) &&
-      (!typeFilter || e.emp_type === typeFilter)
+      (!typeFilter || e.emp_type === typeFilter) &&
+      (!schoolFilter || e.school_id === schoolFilter)
     )
   }).sort((a, b) => {
     const nameA = `${a.last_name}, ${a.first_name}`
@@ -80,19 +82,21 @@ export default function HRMODashboard() {
     return nameA.localeCompare(nameB, 'en', { sensitivity: 'base' })
   })
 
+  const schoolCounts = employees.reduce((counts, e) => {
+    counts[e.school_id] = (counts[e.school_id] || 0) + 1
+    return counts
+  }, {})
+  const unassignedCount = schoolCounts.UNASSIGNED || 0
+  const sdoCount = schoolCounts.DEFAULT || 0
+
   const teaching    = employees.filter(e => e.emp_type === 'Teaching').length
   const nonTeaching = employees.filter(e => e.emp_type === 'Non-Teaching').length
-  const lowLeave    = employees.filter(e => {
-    if (e.emp_type === 'Non-Teaching') return vlBalance(e) < 5
-    return (e.vsc_balance || 0) < 5
-  }).length
-  const forcedLeave = employees.filter(e => requiresForcedLeave(e)).length
 
   return (
     <div className={styles.page}>
       {ctoWarnings.length > 0 && <div className={`${styles.infoBox} ${styles.infoBoxDanger}`} role="alert">
         <strong>CTO expires within 14 days:</strong> {ctoWarnings.map(({ employee, credit }) =>
-          `${employee.last_name}, ${employee.first_name}: ${fmt(credit.remaining_days)} day(s), credited ${credit.granted_on}, expires ${credit.expires_on}`
+          `${employee.last_name}, ${employee.first_name}: ${fmt(credit.remaining_days)} day(s), credited ${fmtDate(credit.granted_on)}, expires ${fmtDate(credit.expires_on)}`
         ).join(' • ')}
       </div>}
       {/* Stats */}
@@ -110,15 +114,6 @@ export default function HRMODashboard() {
           <div className={styles.statLabel}>Non-Teaching</div>
           <div className={styles.statValue} style={{ color: '#185FA5' }}>{nonTeaching}</div>
           <div className={styles.statSub}>VL + SL auto-accrual</div>
-        </div>
-        <div className={styles.statCard}>
-          <div className={styles.statLabel}>Low Balance (&lt;5 days)</div>
-          <div className={styles.statValue} style={{ color: '#A32D2D' }}>{lowLeave}</div>
-        </div>
-        <div className={styles.statCard}>
-          <div className={styles.statLabel}>Forced Leave Required</div>
-          <div className={styles.statValue} style={{ color: '#854F0B' }}>{forcedLeave}</div>
-          <div className={styles.statSub}>≥10 VL days (CSC rule)</div>
         </div>
       </div>
 
@@ -143,7 +138,7 @@ export default function HRMODashboard() {
                             <td><div className={styles.nameCell}>{request.employee?.last_name}, {request.employee?.first_name}</div><div className={styles.subCell}>{request.school_id}</div></td>
                             <td>{request.requested_by}</td>
                             <td><div>{request.leave_type}</div>{request.monetization_option && <div className={styles.subCell}>{request.monetization_option.replace('VL', '')} VL days</div>}</td>
-                            <td>{request.date_from}{request.date_to !== request.date_from ? ` – ${request.date_to}` : ''}</td>
+                            <td>{fmtDate(request.date_from)}{request.date_to !== request.date_from ? ` – ${fmtDate(request.date_to)}` : ''}</td>
                             <td>{fmt(request.days)}</td>
                             <td>{request.reason || '—'}</td>
                             <td><div style={{ display: 'flex', gap: 4 }}><button className={styles.btnPrimarySm} disabled={reviewingId === request.id} onClick={() => handleApprove(request)}>Approve</button><button className={styles.btnDangerSm} disabled={reviewingId === request.id} onClick={() => handleReject(request)}>Reject</button></div></td>
@@ -178,6 +173,18 @@ export default function HRMODashboard() {
             <option value="Teaching">Teaching</option>
             <option value="Non-Teaching">Non-Teaching</option>
           </select>
+          <select className={styles.schoolSelect} value={schoolFilter} onChange={e => setSchoolFilter(e.target.value)}>
+            <option value="">All Schools / Offices ({employees.length})</option>
+            {sdoCount > 0 && <option value="DEFAULT">SDO / Division Office ({sdoCount})</option>}
+            {unassignedCount > 0 && <option value="UNASSIGNED">⚠ Unassigned — Needs School ({unassignedCount})</option>}
+            <optgroup label="Schools">
+              {SCHOOLS.map(school => (
+                <option key={school.id} value={school.id}>
+                  {school.name} ({schoolCounts[school.id] || 0})
+                </option>
+              ))}
+            </optgroup>
+          </select>
           <select value={sortBy} onChange={e => setSortBy(e.target.value)}>
             <option value="name_asc">Name: A–Z</option>
             <option value="name_desc">Name: Z–A</option>
@@ -194,12 +201,13 @@ export default function HRMODashboard() {
         {loading
           ? <div className={styles.emptyState}>Loading…</div>
           : <div className={styles.tableWrap}>
-              <table className={styles.table}>
+              <table className={`${styles.table} ${styles.centeredTable}`}>
                 <thead>
                   <tr>
                     <th>Name / Position</th>
                     <th>Type</th>
                     <th>Date Hired</th>
+                    <th>Date Last Promoted</th>
                     <th>Years in Service</th>
                     <th>VL / VSC Balance</th>
                     <th>SL Balance</th>
@@ -211,7 +219,7 @@ export default function HRMODashboard() {
                 </thead>
                 <tbody>
                   {filtered.length === 0
-                    ? <tr><td colSpan={10} className={styles.emptyState}>No employees found.</td></tr>
+                    ? <tr><td colSpan={11} className={styles.emptyState}>No employees found.</td></tr>
                     : filtered.map(emp => {
                         const vl = emp.emp_type === 'Teaching' ? vscBalance(emp) : vlBalance(emp)
                         const sl = emp.emp_type === 'Teaching' ? null : slBalance(emp)
@@ -235,7 +243,8 @@ export default function HRMODashboard() {
                                 {emp.emp_type === 'Teaching' ? 'Teaching' : 'Non-Teaching'}
                               </span>
                             </td>
-                            <td className={styles.subCell}>{emp.hired_date}</td>
+                            <td className={styles.subCell}>{fmtDate(emp.hired_date)}</td>
+                            <td className={styles.subCell}>{fmtDate(emp.salary_step_basis_date)}</td>
                             <td className={styles.subCell}>{yearsOfService(emp.hired_date)} year(s)</td>
                             <td className={styles.creditCell}>{fmt(vl)}</td>
                             <td className={styles.creditCell}>{sl !== null ? fmt(sl) : '—'}</td>

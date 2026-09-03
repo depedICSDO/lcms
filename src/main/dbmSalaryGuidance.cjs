@@ -1,7 +1,7 @@
-export const DBM_SALARY_GUIDANCE_URL = 'https://www.dbm.gov.ph/index.php/dbm-issuances/national-budget-circulars'
-export const CURRENT_DBM_SALARY_CIRCULAR = 601
+const DBM_SALARY_GUIDANCE_URL = 'https://www.dbm.gov.ph/index.php/dbm-issuances/national-budget-circulars'
+const CURRENT_DBM_SALARY_CIRCULAR = 601
 
-export function findNewerDbmSalaryGuidance(html, currentCircular = CURRENT_DBM_SALARY_CIRCULAR) {
+function findNewerDbmSalaryGuidance(html, currentCircular = CURRENT_DBM_SALARY_CIRCULAR) {
   const text = String(html || '')
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
@@ -24,3 +24,5 @@ export function findNewerDbmSalaryGuidance(html, currentCircular = CURRENT_DBM_S
     .sort((a, b) => b.circular - a.circular)
   return matches.find(item => item.circular > currentCircular) || null
 }
+
+module.exports = { DBM_SALARY_GUIDANCE_URL, CURRENT_DBM_SALARY_CIRCULAR, findNewerDbmSalaryGuidance }
