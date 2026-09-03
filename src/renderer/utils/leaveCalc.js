@@ -8,7 +8,7 @@ export const ACCRUAL_RATE = 1.25 // days per month for Non-Teaching (VL and SL s
 export const WORKING_DAYS_PER_MONTH = 22 // per RA 6758
 export const SPECIAL_PRIVILEGE_DAYS_PER_YEAR = 3
 export const MANDATORY_LEAVE_DAYS_PER_YEAR = 5
-export const WELLNESS_LEAVE_DAYS_PER_YEAR = 3
+export const WELLNESS_LEAVE_DAYS_PER_YEAR = 5
 export const CTO_EXPIRY_WARNING_DAYS = 14
 
 function employeeType(employee) {
@@ -307,7 +307,7 @@ export const LEAVE_TYPES_NONTEACHING = [
   { key: 'special_leave_women', label: 'Special Leave Benefits for Women', basis: 'RA 9710 / CSC MC 25, s. 2010', deduction: 'Outside VL/SL credits' },
   { key: 'special_emergency', label: 'Special Emergency (Calamity) Leave', basis: 'CSC MC 2, s. 2012', deduction: 'Outside VL/SL credits' },
   { key: 'adoption', label: 'Adoption Leave', basis: 'RA 11642', deduction: 'Outside VL/SL credits' },
-  { key: 'wellness', label: 'Wellness Leave', basis: 'DepEd wellness leave policy', annualEntitlement: WELLNESS_LEAVE_DAYS_PER_YEAR, deduction: '3 days/year; outside VL/SL credits' },
+  { key: 'wellness', label: 'Wellness Leave', basis: 'DepEd wellness leave policy', annualEntitlement: WELLNESS_LEAVE_DAYS_PER_YEAR, deduction: '5 days/year; outside VL/SL credits' },
   { key: 'monetization', label: 'Monetization of Leave Credits', basis: 'CSC MC 41, s. 1998, Sec. 22', deduction: 'Standard monetization deducts 10–30 VL days/year and must retain at least 5 VL days' },
   { key: 'cto', label: 'Compensatory Time Off (CTO)', basis: 'Expires one year after grant', deduction: 'Deducts from active CTO grants' },
   { key: 'terminal', label: 'Terminal Leave', basis: 'EO 292 / CSC leave rules', deduction: 'Paid from accumulated VL/SL credits' },

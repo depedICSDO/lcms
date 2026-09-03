@@ -15,6 +15,7 @@ import {
   leaveAvailability,
   mandatoryLeaveCompliance,
 } from "@/utils/leaveCalc";
+import { schoolNameById } from "@/utils/schools";
 import styles from "../HRMO/Modal.module.css";
 
 export default function EmployeeDetailModal({ employee, onClose }) {
@@ -100,6 +101,7 @@ export default function EmployeeDetailModal({ employee, onClose }) {
               }}
             >
               {employee.position} · {years} year(s) in service
+              {employee.assigned_school_id ? ` · ${schoolNameById(employee.assigned_school_id)}` : ''}
             </span>
           </div>
 

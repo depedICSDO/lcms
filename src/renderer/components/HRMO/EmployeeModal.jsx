@@ -14,6 +14,7 @@ import {
   salaryGradeForPosition,
   salaryStepsForGrade,
 } from '@/utils/salarySchedule'
+import { SCHOOLS } from '@/utils/schools'
 import styles from './Modal.module.css'
 
 const CUSTOM_POSITIONS_KEY = 'lcms_custom_positions'
@@ -46,9 +47,14 @@ function customPositionGroup(empType, workAssignment) {
   return empType === 'Teaching' ? 'Teaching' : workAssignment
 }
 
+function isSchoolBased(empType, workAssignment) {
+  return empType === 'Teaching' || workAssignment === 'School-Based'
+}
+
 const BLANK = {
   last_name: '', first_name: '', middle_name: '', employee_no: '',
   emp_type: '', work_assignment: '', position: '', emp_status: 'Permanent',
+  assigned_school_id: '',
   hired_date: '', salary_grade: '', salary_step: 1, salary_step_mode: 'automatic',
   salary_step_basis_date: '', monthly_salary: '', retirement_date: '', retirement_notes: '',
   // Teaching
@@ -104,6 +110,7 @@ export default function EmployeeModal({ employee, onSave, onClose }) {
       salary_grade: current.emp_type === empType ? current.salary_grade : '',
       salary_step: current.emp_type === empType ? current.salary_step : 1,
       monthly_salary: current.emp_type === empType ? current.monthly_salary : '',
+      assigned_school_id: current.emp_type === empType ? current.assigned_school_id : '',
     }))
     if (form.emp_type !== empType) setIsCustomPosition(false)
   }
@@ -116,6 +123,7 @@ export default function EmployeeModal({ employee, onSave, onClose }) {
       salary_grade: current.work_assignment === workAssignment ? current.salary_grade : '',
       salary_step: current.work_assignment === workAssignment ? current.salary_step : 1,
       monthly_salary: current.work_assignment === workAssignment ? current.monthly_salary : '',
+      assigned_school_id: workAssignment === 'School-Based' ? current.assigned_school_id : '',
     }))
     if (form.work_assignment !== workAssignment) setIsCustomPosition(false)
   }
@@ -196,6 +204,7 @@ export default function EmployeeModal({ employee, onSave, onClose }) {
       setErr('Current position start date cannot be earlier than the date hired.'); return
     }
     if (form.emp_type === 'Non-Teaching' && !form.work_assignment) { setErr('Select SDO-Based or School-Based.'); return }
+    if (isSchoolBased(form.emp_type, form.work_assignment) && !form.assigned_school_id) { setErr('Select the school.'); return }
     if (!form.position.trim()) { setErr('Position is required.'); return }
     setSaving(true)
     setErr('')
@@ -212,6 +221,13 @@ export default function EmployeeModal({ employee, onSave, onClose }) {
       ...form,
       position: normalizedPosition,
       work_assignment: form.emp_type === 'Non-Teaching' ? form.work_assignment : null,
+      assigned_school_id: isSchoolBased(form.emp_type, form.work_assignment) ? form.assigned_school_id : null,
+      // School-based staff (Teaching, or Non-Teaching assigned to a school even when
+      // their plantilla item sits under OSDS/DIC/etc.) route to that school's own
+      // AOII-scoped roster. SDO-based staff stay under the HRMO office tenant.
+      school_id: isSchoolBased(form.emp_type, form.work_assignment)
+        ? form.assigned_school_id
+        : (user?.school_id || 'DEFAULT'),
       vl_override: form.vl_override !== '' ? parseFloat(form.vl_override) : null,
       sl_override: form.sl_override !== '' ? parseFloat(form.sl_override) : null,
       vsc_balance: parseFloat(form.vsc_balance) || 0,
@@ -326,6 +342,19 @@ export default function EmployeeModal({ employee, onSave, onClose }) {
                   {assignment}
                 </button>
               ))}
+            </div>
+          </>}
+
+          {isSchoolBased(form.emp_type, form.work_assignment) && <>
+            <div className={styles.dividerLabel}>School Assignment *</div>
+            <div className={styles.field}>
+              <label>School *</label>
+              <select value={form.assigned_school_id} onChange={e => set('assigned_school_id', e.target.value)}>
+                <option value="">Select a school</option>
+                {SCHOOLS.map(school => (
+                  <option key={school.id} value={school.id}>{school.name} ({school.id})</option>
+                ))}
+              </select>
             </div>
           </>}
 

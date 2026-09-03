@@ -31,6 +31,16 @@ export default function LeaveTransactionModal({ employee, onClose, onSaved }) {
 
   function set(field, val) { setForm(f => ({ ...f, [field]: val })) }
 
+  function oneYearLater(dateStr) {
+    if (!dateStr) return ''
+    const date = new Date(`${dateStr}T00:00:00`)
+    date.setFullYear(date.getFullYear() + 1)
+    return date.toISOString().slice(0, 10)
+  }
+
+  const isCtoCredit = form.txn_type === 'CTO_CREDIT'
+  const dateToValue = isCtoCredit ? oneYearLater(form.date_from) : form.date_to
+
   function selectLeaveCategory(category) {
     let txnType = 'SPECIAL'
     if (category === 'vsc') txnType = 'VSC_DEBIT'
@@ -232,8 +242,13 @@ export default function LeaveTransactionModal({ employee, onClose, onSaved }) {
                     <input type="date" value={form.date_from} onChange={e => set('date_from', e.target.value)} />
                   </div>
                   <div className={styles.field}>
-                    <label>Date To</label>
-                    <input type="date" value={form.date_to} onChange={e => set('date_to', e.target.value)} />
+                    <label>Date To{isCtoCredit ? ' (expires, auto-computed)' : ''}</label>
+                    <input
+                      type="date"
+                      value={dateToValue}
+                      disabled={isCtoCredit}
+                      onChange={e => set('date_to', e.target.value)}
+                    />
                   </div>
                   <div className={styles.field} style={{ gridColumn: '1/-1' }}>
                     <label>Reason</label>

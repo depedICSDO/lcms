@@ -84,7 +84,7 @@ test('tracks annual non-teaching special leave entitlements outside VL and SL', 
   const privilege = LEAVE_TYPES_NONTEACHING.find(type => type.key === 'special_privilege')
   const wellness = LEAVE_TYPES_NONTEACHING.find(type => type.key === 'wellness')
   assert.equal(leaveAvailability(privilege, employee, new Date('2026-09-01')).remaining, 2)
-  assert.equal(annualLeaveRemaining(employee, wellness.label, wellness.annualEntitlement, new Date('2026-09-01')), 1)
+  assert.equal(annualLeaveRemaining(employee, wellness.label, wellness.annualEntitlement, new Date('2026-09-01')), 3)
 })
 
 test('counts ordinary VL, authority cancellations, forfeiture, and monetization in mandatory compliance history', () => {

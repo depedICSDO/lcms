@@ -8,6 +8,7 @@ import {
 import EmployeeModal from '@/components/HRMO/EmployeeModal'
 import LeaveTransactionModal from '@/components/HRMO/LeaveTransactionModal'
 import EmployeeDetailModal from '@/components/School/EmployeeDetailModal'
+import { schoolNameById } from '@/utils/schools'
 import styles from './Dashboard.module.css'
 
 export default function HRMODashboard() {
@@ -224,7 +225,10 @@ export default function HRMODashboard() {
                               <button className={styles.nameButton} onClick={() => setDetailTarget(emp)}>
                                 {emp.last_name}, {emp.first_name} {emp.middle_name ? emp.middle_name[0] + '.' : ''}
                               </button>
-                              <div className={styles.subCell}>{emp.employee_no} · {emp.position}</div>
+                              <div className={styles.subCell}>
+                                {emp.employee_no} · {emp.position}
+                                {emp.assigned_school_id ? ` · ${schoolNameById(emp.assigned_school_id)}` : ''}
+                              </div>
                             </td>
                             <td>
                               <span className={`${styles.pill} ${emp.emp_type === 'Teaching' ? styles.pillTeaching : styles.pillNT}`}>

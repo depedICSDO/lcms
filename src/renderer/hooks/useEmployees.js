@@ -100,7 +100,7 @@ export function useEmployees() {
     const localEmployee = {
       ...emp,
       id: emp.id || createLocalId(),
-      school_id: user?.school_id || 'DEFAULT',
+      school_id: emp.school_id || user?.school_id || 'DEFAULT',
       created_at: emp.created_at || now,
       updated_at: now
     }
