@@ -1,4 +1,4 @@
-name: Build Windows and macOS Release
+name: Build Windows Release
 
 on:
   push:
@@ -51,54 +51,11 @@ jobs:
             dist/*.exe.blockmap
             dist/latest.yml
 
-  build-macos:
-    strategy:
-      matrix:
-        include:
-          - runner: macos-15-intel
-            arch: x64
-          - runner: macos-latest
-            arch: arm64
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - name: Check out tagged source
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Verify tag matches package version
-        shell: bash
-        run: |
-          package_version=$(node -p "require('./package.json').version")
-          test "${{ github.ref_name }}" = "v${package_version}"
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run tests
-        run: npm test
-
-      # No VITE_SUPABASE_* env needed — supabase.js falls back to the public
-      # project URL/anon key baked in as defaults when these are unset.
-      - name: Build macOS installer
-        run: npm run dist -- --mac dmg --${{ matrix.arch }} --publish never
-
-      - name: Upload macOS release files
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-release-${{ matrix.arch }}
-          if-no-files-found: error
-          path: dist/*.dmg
-
   publish-release:
-    needs: [build-windows, build-macos]
+    needs: [build-windows]
     runs-on: ubuntu-latest
     steps:
-      - name: Download packaged installers
+      - name: Download packaged installer
         uses: actions/download-artifact@v4
         with:
           path: release-assets
