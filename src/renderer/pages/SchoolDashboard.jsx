@@ -1,13 +1,21 @@
 import { useState } from 'react'
 import { useEmployees } from '@/hooks/useEmployees'
 import { useLeaveRequests } from '@/hooks/useLeaveRequests'
+import { supabase } from '@/utils/supabase'
+import { toCsv, parseCsv } from '@/utils/csv'
 import { ctoBalance, ctoExpiryWarnings, vlBalance, slBalance, vscBalance, fmt, fmtDate, yearsOfService, totalEarned } from '@/utils/leaveCalc'
 import EmployeeDetailModal from '@/components/School/EmployeeDetailModal'
 import LeaveRequestModal from '@/components/School/LeaveRequestModal'
 import styles from './Dashboard.module.css'
 
+const CSV_COLUMNS = [
+  { key: 'last_name', label: 'Family Name' },
+  { key: 'first_name', label: 'First Name' },
+  { key: 'middle_name', label: 'Middle Name or Initial' },
+]
+
 export default function SchoolDashboard() {
-  const { employees, loading } = useEmployees()
+  const { employees, loading, fetch: refetchEmployees } = useEmployees()
   const { requests, error: requestError, submitRequest, cancelMandatoryRequest } = useLeaveRequests()
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
@@ -15,6 +23,67 @@ export default function SchoolDashboard() {
   const [detail, setDetail] = useState(null)
   const [requestTarget, setRequestTarget] = useState(null)
   const [actionMessage, setActionMessage] = useState('')
+  const [linkBusy, setLinkBusy] = useState(false)
+  const [linkMessage, setLinkMessage] = useState('')
+  const [linkError, setLinkError] = useState('')
+
+  async function handleDownloadTemplate() {
+    setLinkError(''); setLinkMessage('')
+    if (!window.electronAPI?.saveTextFile) {
+      setLinkError('File saving is unavailable — restart the app (fully quit, not just reload) and try again.')
+      return
+    }
+    try {
+      const csv = toCsv([], CSV_COLUMNS)
+      const result = await window.electronAPI.saveTextFile({
+        defaultFilename: 'Staff Name Template.csv',
+        content: csv
+      })
+      if (result?.canceled) return
+      if (!result?.success) { setLinkError('Could not save the file.'); return }
+      setLinkMessage(`Template saved to ${result.filePath}. Fill in one row per staff member (Family Name, First Name, Middle Name or Initial), then use "Upload & Link" to submit it.`)
+    } catch (err) {
+      setLinkError(err.message || 'Something went wrong while downloading the file.')
+    }
+  }
+
+  async function handleUploadLink() {
+    setLinkError(''); setLinkMessage('')
+    if (!window.electronAPI?.openTextFile) {
+      setLinkError('File opening is unavailable — restart the app (fully quit, not just reload) and try again.')
+      return
+    }
+    try {
+      const result = await window.electronAPI.openTextFile({})
+      if (!result || result.canceled) return
+      const parsed = parseCsv(result.content)
+      const rows = parsed
+        .map(r => ({
+          last_name: r['Family Name'] || '',
+          first_name: r['First Name'] || '',
+          middle_name: r['Middle Name or Initial'] || '',
+        }))
+        .filter(r => r.last_name || r.first_name)
+      if (!rows.length) {
+        setLinkError('No staff rows found in that file. Fill in the Family Name / First Name / Middle Name or Initial columns of the downloaded template, then upload it.')
+        return
+      }
+      setLinkBusy(true)
+      const { data, error } = await supabase.rpc('lcms_link_unassigned_employees_by_name', { rows })
+      setLinkBusy(false)
+      if (error) { setLinkError(error.message); return }
+      const linked = (data || []).filter(r => r.linked)
+      const skipped = (data || []).filter(r => !r.linked)
+      setLinkMessage(
+        `${linked.length} of ${rows.length} employee(s) linked to your school.` +
+        (skipped.length ? ` Not linked: ${skipped.map(s => `${s.last_name}, ${s.first_name} (${s.reason})`).join('; ')}.` : '')
+      )
+      if (linked.length) await refetchEmployees()
+    } catch (err) {
+      setLinkBusy(false)
+      setLinkError(err.message || 'Something went wrong while linking employees.')
+    }
+  }
 
   const ctoWarnings = employees.flatMap(employee =>
     ctoExpiryWarnings(employee).map(credit => ({ employee, credit })))
@@ -60,9 +129,27 @@ export default function SchoolDashboard() {
 
       {ctoWarnings.length > 0 && <div className={`${styles.infoBox} ${styles.infoBoxDanger}`} role="alert">
         <strong>CTO expires within 14 days:</strong> {ctoWarnings.map(({ employee, credit }) =>
-          `${employee.last_name}, ${employee.first_name}: ${fmt(credit.remaining_days)} day(s), credited ${fmtDate(credit.granted_on)}, expires ${fmtDate(credit.expires_on)}`
+          `${employee.last_name}, ${employee.first_name}${employee.middle_name ? ` ${employee.middle_name}` : ''}: ${fmt(credit.remaining_days)} day(s), credited ${fmtDate(credit.granted_on)}, expires ${fmtDate(credit.expires_on)}`
         ).join(' • ')}
       </div>}
+
+      <div className={styles.card} style={{ flex: 'none' }}>
+        <div className={styles.cardHeader}>
+          <span className={styles.cardTitle}>Link Unassigned Staff</span>
+          <div className={styles.headerActions}>
+            <button className={styles.btnOutline} onClick={handleDownloadTemplate}>Download CSV Template</button>
+            <button className={styles.btnPrimary} onClick={handleUploadLink} disabled={linkBusy}>{linkBusy ? 'Linking…' : 'Upload & Link'}</button>
+          </div>
+        </div>
+        <div style={{ padding: '10px 16px', fontSize: 12, color: 'var(--text-muted)' }}>
+          Some personnel are imported without a specific school on file. Download the template, fill in one row per
+          staff member (Family Name, First Name, Middle Name or Initial), and upload it — matches are linked to your
+          school automatically. School head, principal, assistant principal, and head teacher positions are assigned
+          by HRMO and can't be linked this way.
+        </div>
+        {linkError && <div className={styles.inlineError}>{linkError}</div>}
+        {linkMessage && <div className={styles.inlineSuccess}>{linkMessage}</div>}
+      </div>
 
       <div className={styles.card} style={{ flex: 'none', maxHeight: 230 }}>
         <div className={styles.cardHeader}>
@@ -79,7 +166,7 @@ export default function SchoolDashboard() {
                     ? <tr><td colSpan={7} className={styles.emptyState}>No leave requests submitted.</td></tr>
                     : requests.slice(0, 20).map(request => (
                         <tr key={request.id}>
-                          <td>{request.employee?.last_name}, {request.employee?.first_name}</td>
+                          <td>{request.employee?.last_name}, {request.employee?.first_name}{request.employee?.middle_name ? ` ${request.employee.middle_name}` : ''}</td>
                           <td>{request.leave_type}</td>
                           <td>{fmtDate(request.date_from)}{request.date_to !== request.date_from ? ` – ${fmtDate(request.date_to)}` : ''}</td>
                           <td>{fmt(request.days)}</td>
@@ -135,7 +222,7 @@ export default function SchoolDashboard() {
                         const slUsed = employee.emp_type === 'Teaching' ? null : employee.sl_used || 0
                         return (
                           <tr key={employee.id}>
-                            <td><button className={styles.nameButton} onClick={() => setDetail(employee)}>{employee.last_name}, {employee.first_name}</button><div className={styles.subCell}>{employee.position}</div></td>
+                            <td><button className={styles.nameButton} onClick={() => setDetail(employee)}>{employee.last_name}, {employee.first_name}{employee.middle_name ? ` ${employee.middle_name}` : ''}</button><div className={styles.subCell}>{employee.position}</div></td>
                             <td><span className={`${styles.pill} ${employee.emp_type === 'Teaching' ? styles.pillTeaching : styles.pillNT}`}>{employee.emp_type === 'Teaching' ? 'VSC/PVP' : 'VL+SL'}</span></td>
                             <td className={styles.subCell}>{fmtDate(employee.hired_date)}</td>
                             <td className={styles.subCell}>{yearsOfService(employee.hired_date)} year(s)</td>
@@ -144,7 +231,7 @@ export default function SchoolDashboard() {
                             <td className={styles.subCell}>{earned === null ? '—' : fmt(earned)}</td>
                             <td className={styles.subCell}>{fmt(vlUsed)}</td>
                             <td className={styles.subCell}>{slUsed === null ? '—' : fmt(slUsed)}</td>
-                            <td><div style={{ display: 'flex', gap: 4 }}><button className={styles.btnSm} onClick={() => setDetail(employee)}>View</button><button className={styles.btnPrimarySm} onClick={() => setRequestTarget(employee)}>Request Leave</button><span className={styles.subCell}>CTO {fmt(ctoBalance(employee))}</span></div></td>
+                            <td><div style={{ display: 'flex', gap: 4 }}><button className={styles.btnInfoSm} onClick={() => setDetail(employee)}>View</button><button className={styles.btnSuccessSm} onClick={() => setRequestTarget(employee)}>Request Leave</button><span className={styles.subCell}>CTO {fmt(ctoBalance(employee))}</span></div></td>
                           </tr>
                         )
                       })}

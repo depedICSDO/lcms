@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { LEAVE_TYPES_TEACHING, LEAVE_TYPES_NONTEACHING, MONETIZATION_OPTIONS, ctoBalance, fmt, leaveAvailability, monetizationEligibility, slBalance, vlBalance, vscBalance } from '@/utils/leaveCalc'
+import { LEAVE_TYPES_TEACHING, LEAVE_TYPES_NONTEACHING, MONETIZATION_VL_OPTIONS, MONETIZATION_SL_OPTIONS, monetizationOptionKey, ctoBalance, fmt, leaveAvailability, monetizationEligibility, slBalance, vlBalance, vscBalance } from '@/utils/leaveCalc'
 import styles from '@/components/HRMO/Modal.module.css'
 
 function transactionType(category, isTeaching) {
@@ -17,7 +17,8 @@ export default function LeaveRequestModal({ employee, onSubmit, onClose }) {
   const [form, setForm] = useState({
     leave_category: isTeaching ? 'vsc' : 'vacation',
     days: '', date_from: '', date_to: '', reason: '', remarks: '', with_pay: true,
-    monetization_option: 'VL10'
+    monetization_vl: 10,
+    monetization_sl: 0,
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -29,12 +30,12 @@ export default function LeaveRequestModal({ employee, onSubmit, onClose }) {
 
   async function handleSubmit() {
     const isMonetization = form.leave_category === 'monetization'
-    const days = isMonetization ? MONETIZATION_OPTIONS[form.monetization_option].vl : Number(form.days)
+    const days = isMonetization ? form.monetization_vl + form.monetization_sl : Number(form.days)
     if (!Number.isFinite(days) || days <= 0) return setError('Enter a valid number of days.')
     if (!form.date_from) return setError('Date from is required.')
     if (form.date_to && form.date_to < form.date_from) return setError('Date to cannot be before date from.')
     if (isMonetization) {
-      const eligibility = monetizationEligibility(employee, form.monetization_option)
+      const eligibility = monetizationEligibility(employee, form.monetization_vl, form.monetization_sl)
       if (!eligibility.eligible) return setError(eligibility.reason)
     }
     if (form.leave_category === 'cto' && days > ctoBalance(employee)) return setError('Insufficient unexpired CTO balance.')
@@ -56,7 +57,7 @@ export default function LeaveRequestModal({ employee, onSubmit, onClose }) {
       reason: form.reason,
       remarks: form.remarks,
       with_pay: form.with_pay,
-      monetization_option: isMonetization ? form.monetization_option : null
+      monetization_option: isMonetization ? monetizationOptionKey(form.monetization_vl, form.monetization_sl) : null
     })
     setSaving(false)
     if (!result.success) return setError(result.error)
@@ -64,10 +65,10 @@ export default function LeaveRequestModal({ employee, onSubmit, onClose }) {
   }
 
   return (
-    <div className={styles.overlay} onClick={event => event.target === event.currentTarget && onClose()}>
+    <div className={styles.overlay}>
       <div className={styles.modal} style={{ maxWidth: 500 }}>
         <div className={styles.modalHeader}>
-          <h2>Request Leave — {employee.last_name}, {employee.first_name}</h2>
+          <h2>Request Leave — {employee.last_name}, {employee.first_name}{employee.middle_name ? ` ${employee.middle_name}` : ''}</h2>
           <button className={styles.closeBtn} onClick={onClose}>×</button>
         </div>
         <div className={styles.body}>
@@ -98,12 +99,18 @@ export default function LeaveRequestModal({ employee, onSubmit, onClose }) {
                 </div>}
                 <div className={styles.field}>
                   <label>Number of Days *</label>
-                  <input type="number" min="0.5" step="0.5" value={form.leave_category === 'monetization' ? MONETIZATION_OPTIONS[form.monetization_option].vl : form.days} disabled={form.leave_category === 'monetization'} onChange={event => set('days', event.target.value)} />
+                  <input type="number" min="0.5" step="0.5" value={form.leave_category === 'monetization' ? form.monetization_vl + form.monetization_sl : form.days} disabled={form.leave_category === 'monetization'} onChange={event => set('days', event.target.value)} />
                 </div>
                 {form.leave_category === 'monetization' && <div className={styles.field}>
                   <label>VL Days to Monetize *</label>
-                  <select value={form.monetization_option} onChange={event => set('monetization_option', event.target.value)}>
-                    {Object.entries(MONETIZATION_OPTIONS).map(([key, option]) => <option key={key} value={key}>{option.label}</option>)}
+                  <select value={form.monetization_vl} onChange={event => set('monetization_vl', +event.target.value)}>
+                    {MONETIZATION_VL_OPTIONS.map(days => <option key={days} value={days}>{days} VL day(s)</option>)}
+                  </select>
+                </div>}
+                {form.leave_category === 'monetization' && <div className={styles.field}>
+                  <label>SL Days to Monetize</label>
+                  <select value={form.monetization_sl} onChange={event => set('monetization_sl', +event.target.value)}>
+                    {MONETIZATION_SL_OPTIONS.map(days => <option key={days} value={days}>{days} SL day(s)</option>)}
                   </select>
                 </div>}
                 <div className={styles.field}>

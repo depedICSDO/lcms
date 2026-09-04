@@ -1,25 +1,49 @@
+import { useEffect, useRef, useState } from 'react'
 import { AuthProvider, useAuth } from './hooks/useAuth'
 import LoginPage from './pages/LoginPage'
+import AdminLoginPage from './pages/AdminLoginPage'
 import HRMODashboard from './pages/HRMODashboard'
 import SchoolDashboard from './pages/SchoolDashboard'
+import AllowedUsersAdmin from './pages/AllowedUsersAdmin'
 import SplashScreen from './components/shared/SplashScreen'
 import Topbar from './components/shared/Topbar'
 import DiagnosticRoleChooser from './pages/DiagnosticRoleChooser'
 
 function AppInner() {
   const { user, loading } = useAuth()
+  // Reached only via 5 clicks on the login logo — not linked from anywhere
+  // in the normal UI. Lands directly on the allowed-users admin screen.
+  const [secretAccess, setSecretAccess] = useState(false)
+  const [showManageUsers, setShowManageUsers] = useState(false)
+  const wasSignedIn = useRef(false)
+
+  useEffect(() => {
+    // Only clear the secret entry when a signed-in session actually ends
+    // (logout), not on the initial render where user is still null.
+    if (wasSignedIn.current && !user) {
+      setSecretAccess(false)
+      setShowManageUsers(false)
+    }
+    wasSignedIn.current = Boolean(user)
+  }, [user])
 
   if (loading) return <SplashScreen />
-  if (!user) return <LoginPage />
+  if (!user) {
+    return secretAccess
+      ? <AdminLoginPage onBack={() => setSecretAccess(false)} onAdminLoggedIn={() => setShowManageUsers(true)} />
+      : <LoginPage onSecretAccess={() => setSecretAccess(true)} />
+  }
   if (import.meta.env.DEV && user.diagnostic && user.role === 'diagnostic') return <DiagnosticRoleChooser />
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
-      <Topbar />
+      <Topbar roleOverride={showManageUsers && user.role === 'hrmo' ? 'ADMIN' : undefined} />
       <div style={{ flex: 1, overflow: 'hidden' }}>
-        {user.role === 'hrmo'
-          ? <HRMODashboard />
-          : <SchoolDashboard />
+        {showManageUsers && user.role === 'hrmo'
+          ? <AllowedUsersAdmin />
+          : user.role === 'hrmo'
+            ? <HRMODashboard />
+            : <SchoolDashboard />
         }
       </div>
     </div>

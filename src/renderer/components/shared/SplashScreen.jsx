@@ -1,4 +1,5 @@
 import styles from './SplashScreen.module.css'
+import lcLogo from '../../../image/LC.png'
 
 export default function SplashScreen() {
   return (
@@ -6,7 +7,7 @@ export default function SplashScreen() {
       <div className={styles.seal}>
         <div className={styles.ring1} />
         <div className={styles.ring2} />
-        <div className={styles.inner}>DepEd</div>
+        <img src={lcLogo} alt="LCMS" className={styles.logo} />
       </div>
       <p className={styles.label}>Leave Credits Management System (LCMS)</p>
       <p className={styles.sub}>Loading…</p>

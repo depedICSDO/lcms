@@ -15,8 +15,7 @@ alter table public.leave_employees
   add column if not exists salary_step_basis_date date;
 
 alter table public.leave_requests
-  add column if not exists monetization_option text
-  check (monetization_option is null or monetization_option in ('VL25_SL5', 'VL30')),
+  add column if not exists monetization_option text,
   add column if not exists cancellation_reason text,
   add column if not exists cancellation_by_authority boolean not null default false,
   add column if not exists cancelled_by text,
@@ -24,10 +23,11 @@ alter table public.leave_requests
   add column if not exists vl_protected_deducted numeric(5,2) not null default 0,
   add column if not exists cancelled_at timestamptz;
 
+-- Encoded by the UI as "VL<n>SL<m>" from two independent dropdowns (see
+-- lcms_record_monetization) — e.g. "VL25SL5", "VL10SL0".
 alter table public.leave_requests drop constraint if exists leave_requests_monetization_option_check;
 alter table public.leave_requests add constraint leave_requests_monetization_option_check
-  check (monetization_option is null or monetization_option ~ '^VL(1[0-9]|2[0-9]|30)$'
-    or monetization_option = 'VL25_SL5');
+  check (monetization_option is null or monetization_option ~ '^VL([0-9]{1,2})SL([0-9])$');
 
 alter table public.leave_transactions drop constraint if exists leave_transactions_txn_type_check;
 alter table public.leave_transactions add constraint leave_transactions_txn_type_check check (txn_type in (
@@ -165,12 +165,20 @@ create or replace function public.lcms_record_monetization(
   employee_uuid uuid, deduction_option text, monetization_date date, monetization_note text default null
 ) returns uuid language plpgsql security definer set search_path = '' as $$
 declare employee public.leave_employees%rowtype; actor text; vl_days numeric; sl_days numeric;
-  regular_vl numeric; available_sl numeric; transaction_uuid uuid; monetized_this_year numeric;
+  regular_vl numeric; available_sl numeric; transaction_uuid uuid; monetized_this_year numeric; total_days numeric;
+  parts text[];
 begin
   if not public.lcms_is_hrmo() then raise exception 'Only an active HRMO account can record monetization'; end if;
-  if deduction_option ~ '^VL(1[0-9]|2[0-9]|30)$' then
-    vl_days := substring(deduction_option from 3)::numeric; sl_days := 0;
-  else raise exception 'Standard monetization must be from 10 to 30 VL days'; end if;
+  -- deduction_option is built by the UI as "VL<n>SL<m>" from two independent
+  -- dropdowns (HRMO picks VL and SL days separately), not folded together.
+  parts := regexp_match(deduction_option, '^VL([0-9]{1,2})SL([0-9])$');
+  if parts is null then raise exception 'Invalid monetization selection'; end if;
+  vl_days := parts[1]::numeric;
+  sl_days := parts[2]::numeric;
+  total_days := vl_days + sl_days;
+  if total_days < 10 or total_days > 30 then
+    raise exception 'Monetization must total between 10 and 30 days (VL + SL combined)';
+  end if;
   select * into employee from public.leave_employees where id = employee_uuid for update;
   if not found or employee.emp_type <> 'Non-Teaching' then raise exception 'Monetization is only for non-teaching employees'; end if;
   regular_vl := coalesce(employee.vl_override,
@@ -181,8 +189,9 @@ begin
   from public.leave_transactions where employee_id = employee.id and txn_type = 'MONETIZE'
     and date_from >= date_trunc('year', monetization_date)::date
     and date_from < (date_trunc('year', monetization_date) + interval '1 year')::date;
-  if monetized_this_year + vl_days > 30 then raise exception 'The annual 30-day monetization maximum would be exceeded'; end if;
+  if monetized_this_year + vl_days + sl_days > 30 then raise exception 'The annual 30-day monetization maximum would be exceeded'; end if;
   if regular_vl - vl_days < 5 then raise exception 'At least 5 regular VL days must remain after monetization'; end if;
+  if sl_days > 0 and available_sl - sl_days < 0 then raise exception 'Insufficient sick leave balance for the SL portion of this monetization'; end if;
   select username into actor from public."LCMS-profiles" where id = (select auth.uid()) and is_active;
   update public.leave_employees set
     vl_used = coalesce(vl_used, 0) + vl_days, sl_used = coalesce(sl_used, 0) + sl_days,
@@ -193,9 +202,18 @@ begin
     (employee_id, school_id, txn_type, leave_type, days, date_from, date_to, remarks, recorded_by)
   values (employee.id, employee.school_id, 'MONETIZE', 'Monetization of Leave Credits', -vl_days,
           monetization_date, monetization_date,
-          concat('CSC Sec. 22 standard monetization: ', vl_days, ' VL day(s)',
+          concat('CSC Sec. 22 monetization: ', vl_days, ' VL day(s)',
+            case when sl_days > 0 then concat(' + ', sl_days, ' SL day(s)') else '' end,
             case when monetization_note is null then '' else ': ' || monetization_note end), actor)
   returning id into transaction_uuid;
+  if sl_days > 0 then
+    insert into public.leave_transactions
+      (employee_id, school_id, txn_type, leave_type, days, date_from, date_to, remarks, recorded_by)
+    values (employee.id, employee.school_id, 'MONETIZE', 'Monetization of Leave Credits', -sl_days,
+            monetization_date, monetization_date,
+            concat('CSC Sec. 22 monetization (SL portion): ', vl_days, ' VL day(s) + ', sl_days, ' SL day(s)',
+              case when monetization_note is null then '' else ': ' || monetization_note end), actor);
+  end if;
   return transaction_uuid;
 end $$;
 
@@ -206,7 +224,7 @@ create or replace function public.lcms_approve_leave_request(
 declare requested public.leave_requests%rowtype; employee public.leave_employees%rowtype;
   regular_balance numeric; protected_used numeric; regular_used numeric;
   new_transaction_id uuid; approver_name text; remaining numeric; take_days numeric; credit record;
-  annual_used numeric; annual_limit numeric;
+  annual_used numeric; annual_limit numeric; mon_parts text[];
 begin
   if not public.lcms_is_hrmo() then raise exception 'Only an active HRMO account can approve leave requests'; end if;
   if not coalesce(form6_is_confirmed, false) then raise exception 'Approval requires confirmation of the signed and approved CS Form 6'; end if;
@@ -238,8 +256,9 @@ begin
   end if;
 
   if requested.txn_type = 'MONETIZE' then
-    if requested.days <> substring(requested.monetization_option from 3)::numeric then
-      raise exception 'Requested monetization days do not match the selected VL deduction';
+    mon_parts := regexp_match(requested.monetization_option, '^VL([0-9]{1,2})SL([0-9])$');
+    if mon_parts is null or requested.days <> (mon_parts[1]::numeric + mon_parts[2]::numeric) then
+      raise exception 'Requested monetization days do not match the selected VL/SL deduction';
     end if;
     select public.lcms_record_monetization(employee.id, requested.monetization_option,
       requested.date_from, requested.remarks) into new_transaction_id;
@@ -455,3 +474,83 @@ grant execute on function public.lcms_grant_cto(uuid,numeric,date,text) to authe
 grant execute on function public.lcms_use_cto(uuid,numeric,date,text) to authenticated;
 grant execute on function public.lcms_record_monetization(uuid,text,date,text) to authenticated;
 grant execute on function public.lcms_cancel_mandatory_leave(uuid,text) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- School self-service linking for the unassigned-employee pool.
+-- Division-wide PSIPOP files (Elementary, SHS, ALS, Kinder) carry no
+-- per-record school attribution, so those employees land with
+-- school_id = 'UNASSIGNED'. Rather than wait on HRMO to reassign each one by
+-- hand, a school downloads a blank CSV template, types in their own staff's
+-- Family/First/Middle name, and uploads it. Each row is matched by name
+-- against the unassigned pool. Ambiguous matches (more than one unassigned
+-- employee sharing that name) are reported, not guessed at. School head,
+-- principal, assistant principal, and head teacher positions are excluded
+-- on purpose — those designations must still be assigned by HRMO.
+-- ---------------------------------------------------------------------------
+create or replace function public.lcms_link_unassigned_employees_by_name(rows jsonb)
+returns table(last_name text, first_name text, middle_name text, linked boolean, reason text)
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  caller_school_id text;
+  caller_school_name text;
+  actor text;
+  r jsonb;
+  match_count int;
+  matched_id uuid;
+  row_last text;
+  row_first text;
+  row_middle text;
+begin
+  select p.school_id, p.school_name, p.username into caller_school_id, caller_school_name, actor
+  from public."LCMS-profiles" p
+  where p.id = (select auth.uid()) and p.is_active;
+
+  if caller_school_id is null or caller_school_id in ('DEFAULT', 'UNASSIGNED') then
+    raise exception 'Only a school-based account can link unassigned employees to a school';
+  end if;
+
+  for r in select * from jsonb_array_elements(rows) loop
+    row_last := trim(coalesce(r ->> 'last_name', ''));
+    row_first := trim(coalesce(r ->> 'first_name', ''));
+    row_middle := nullif(trim(coalesce(r ->> 'middle_name', '')), '');
+    last_name := row_last; first_name := row_first; middle_name := row_middle;
+
+    if row_last = '' or row_first = '' then
+      linked := false; reason := 'Missing family or first name';
+      return next; continue;
+    end if;
+
+    select count(*), max(e.id) into match_count, matched_id
+    from public.leave_employees e
+    where e.school_id = 'UNASSIGNED'
+      and e.position !~* 'principal|head teacher'
+      and lower(trim(e.last_name)) = lower(row_last)
+      and lower(trim(e.first_name)) = lower(row_first)
+      and (
+        row_middle is null or coalesce(trim(e.middle_name), '') = ''
+        or lower(left(trim(e.middle_name), 1)) = lower(left(row_middle, 1))
+      );
+
+    if match_count = 0 then
+      linked := false; reason := 'No matching unassigned employee found';
+    elsif match_count > 1 then
+      linked := false; reason := 'Multiple matches found — ask HRMO to link this one manually';
+    else
+      update public.leave_employees set
+        school_id = caller_school_id,
+        assigned_school_id = caller_school_id,
+        work_assignment = case when emp_type = 'Non-Teaching' then 'School-Based' else work_assignment end,
+        updated_at = now(), updated_by = actor
+      where id = matched_id;
+      linked := true; reason := caller_school_name;
+    end if;
+    return next;
+  end loop;
+end;
+$$;
+
+revoke all on function public.lcms_link_unassigned_employees_by_name(jsonb) from public;
+grant execute on function public.lcms_link_unassigned_employees_by_name(jsonb) to authenticated;

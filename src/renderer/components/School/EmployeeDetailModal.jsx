@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   vlBalance,
   slBalance,
@@ -19,12 +20,30 @@ import {
 import { schoolNameById } from "@/utils/schools";
 import styles from "../HRMO/Modal.module.css";
 
+function transactionYear(transaction) {
+  const raw = transaction.date_from || transaction.created_at;
+  const year = new Date(String(raw || '').slice(0, 10)).getFullYear();
+  return Number.isNaN(year) ? null : year;
+}
+
 export default function EmployeeDetailModal({ employee, onClose }) {
   const isTeaching = employee.emp_type === "Teaching";
   const years = yearsOfService(employee.hired_date);
   const transactions = [...(employee.leave_transactions || [])].sort((a, b) =>
     String(b.created_at || b.date_from || '').localeCompare(String(a.created_at || a.date_from || '')),
   );
+
+  // Calendar-year filter for the history table — from the employee's first
+  // day of service through the current year, so HRMO/AOII can pull up leave,
+  // CTO, and monetization history for any single CY instead of one long list.
+  const currentYear = new Date().getFullYear();
+  const hireYear = new Date(String(employee.hired_date || '').slice(0, 10)).getFullYear();
+  const cyOptions = [];
+  for (let y = currentYear; y >= (Number.isNaN(hireYear) ? currentYear : hireYear); y--) cyOptions.push(y);
+  const [historyYear, setHistoryYear] = useState('all');
+  const visibleTransactions = historyYear === 'all'
+    ? transactions
+    : transactions.filter(t => transactionYear(t) === Number(historyYear));
   const vl = vlBalance(employee);
   const sl = slBalance(employee);
   const vsc = vscBalance(employee);
@@ -53,7 +72,7 @@ export default function EmployeeDetailModal({ employee, onClose }) {
       <div className={styles.modal}>
         <div className={styles.modalHeader}>
           <h2>
-            {employee.last_name}, {employee.first_name} — Leave Details
+            {employee.last_name}, {employee.first_name}{employee.middle_name ? ` ${employee.middle_name}` : ''} — Leave Details
           </h2>
           <button className={styles.closeBtn} onClick={onClose}>
             ✕
@@ -354,16 +373,22 @@ export default function EmployeeDetailModal({ employee, onClose }) {
             </div>
           ))}
 
-          <div className={styles.dividerLabel}>Complete Leave Credit History</div>
+          <div className={styles.dividerLabel} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>Complete Leave Credit History</span>
+            <select value={historyYear} onChange={e => setHistoryYear(e.target.value)} style={{ fontSize: 11, textTransform: 'none', letterSpacing: 'normal', fontWeight: 400 }}>
+              <option value="all">All Years</option>
+              {cyOptions.map(y => <option key={y} value={y}>CY {y}</option>)}
+            </select>
+          </div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
               <thead>
                 <tr><th style={{ textAlign: 'left', padding: 6 }}>Recorded</th><th style={{ textAlign: 'left', padding: 6 }}>Leave / Credit</th><th style={{ textAlign: 'left', padding: 6 }}>Transaction</th><th style={{ textAlign: 'right', padding: 6 }}>Days</th><th style={{ textAlign: 'left', padding: 6 }}>Leave Dates</th><th style={{ textAlign: 'left', padding: 6 }}>Remarks</th></tr>
               </thead>
               <tbody>
-                {transactions.length === 0
-                  ? <tr><td colSpan="6" style={{ padding: 12, textAlign: 'center', color: 'var(--text-muted)' }}>No leave credit transactions recorded.</td></tr>
-                  : transactions.map(transaction => {
+                {visibleTransactions.length === 0
+                  ? <tr><td colSpan="6" style={{ padding: 12, textAlign: 'center', color: 'var(--text-muted)' }}>{transactions.length === 0 ? 'No leave credit transactions recorded.' : `No transactions recorded for CY ${historyYear}.`}</td></tr>
+                  : visibleTransactions.map(transaction => {
                       const days = Number(transaction.days || 0)
                       return <tr key={transaction.id} style={{ borderTop: '0.5px solid var(--border)' }}>
                         <td style={{ padding: 6 }}>{fmtDate(transaction.created_at)}</td>

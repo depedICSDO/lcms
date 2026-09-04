@@ -36,5 +36,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Whole-database migration
   backupDatabase: () => ipcRenderer.invoke('database:backup'),
-  restoreDatabase: () => ipcRenderer.invoke('database:restore')
+  restoreDatabase: () => ipcRenderer.invoke('database:restore'),
+
+  // Generic text-file save/open (CSV export/import, etc.)
+  saveTextFile: (payload) => ipcRenderer.invoke('file:save-text', payload),
+  openTextFile: (payload) => ipcRenderer.invoke('file:open-text', payload)
 })

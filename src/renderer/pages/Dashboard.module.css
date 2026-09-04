@@ -192,3 +192,9 @@
 .btnPrimarySm:hover { background: var(--sdo-blue-dark); }
 .btnDangerSm { padding: 3px 10px; background: transparent; color: var(--danger); border: 0.5px solid var(--danger-border); border-radius: 5px; font-size: 11px; }
 .btnDangerSm:hover { background: var(--danger-bg); }
+.btnInfoSm { padding: 3px 10px; background: var(--info-solid); color: #fff; border: 0; border-radius: 5px; font-size: 11px; }
+.btnInfoSm:hover { filter: brightness(0.9); }
+.btnWarnSm { padding: 3px 10px; background: var(--warning-solid); color: #fff; border: 0; border-radius: 5px; font-size: 11px; }
+.btnWarnSm:hover { filter: brightness(0.9); }
+.btnSuccessSm { padding: 3px 10px; background: var(--success-solid); color: #fff; border: 0; border-radius: 5px; font-size: 11px; }
+.btnSuccessSm:hover { filter: brightness(0.9); }

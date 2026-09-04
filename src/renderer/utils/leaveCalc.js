@@ -142,22 +142,30 @@ export function maxMonetizable(employee) {
   return Math.max(0, Math.min(30, Math.floor(regularVlBalance(employee) - 5)))
 }
 
-export const MONETIZATION_OPTIONS = Object.fromEntries(
-  Array.from({ length: 21 }, (_, index) => {
-    const days = index + 10
-    return [`VL${days}`, { label: `${days} VL days`, vl: days, sl: 0 }]
-  })
-)
+// VL and SL are chosen from two independent dropdowns rather than one
+// combined preset, so HRMO/AOII control each portion directly. The RPC
+// encodes both as "VL<n>SL<m>" — see lcms_record_monetization.
+export const MONETIZATION_VL_OPTIONS = Array.from({ length: 31 }, (_, days) => days) // 0..30
+export const MONETIZATION_SL_OPTIONS = Array.from({ length: 6 }, (_, days) => days)  // 0..5
 
-export function monetizationEligibility(employee, optionKey) {
+export function monetizationOptionKey(vlDays, slDays) {
+  return `VL${Number(vlDays) || 0}SL${Number(slDays) || 0}`
+}
+
+export function monetizationEligibility(employee, vlDays, slDays) {
   if (employeeType(employee) !== 'Non-Teaching') return { eligible: false, reason: 'Only non-teaching employees may use this monetization.' }
-  const option = MONETIZATION_OPTIONS[optionKey]
-  if (!option) return { eligible: false, reason: 'Select a valid monetization option.' }
+  const vlDaysNum = Number(vlDays) || 0
+  const slDaysNum = Number(slDays) || 0
+  const total = vlDaysNum + slDaysNum
+  if (total < 10) return { eligible: false, reason: 'Monetization must total at least 10 days (VL + SL combined).' }
+  if (total > 30) return { eligible: false, reason: 'Monetization cannot exceed 30 days (VL + SL combined).' }
   const vl = regularVlBalance(employee)
+  const sl = slBalance(employee)
   const alreadyMonetized = annualLeaveUsed(employee, 'Monetization of Leave Credits')
-  if (alreadyMonetized + option.vl > 30) return { eligible: false, reason: `Only ${Math.max(0, 30 - alreadyMonetized)} monetization day(s) remain for this calendar year.` }
-  if (vl - option.vl < 5) return { eligible: false, reason: `Monetization must retain at least 5 regular VL days. Current monetizable VL is ${fmt(vl)}.` }
-  return { eligible: true, vl: option.vl, sl: option.sl, total: option.vl + option.sl }
+  if (alreadyMonetized + total > 30) return { eligible: false, reason: `Only ${Math.max(0, 30 - alreadyMonetized)} monetization day(s) remain for this calendar year.` }
+  if (vl - vlDaysNum < 5) return { eligible: false, reason: `Monetization must retain at least 5 regular VL days. Current monetizable VL is ${fmt(vl)}.` }
+  if (slDaysNum > 0 && sl - slDaysNum < 0) return { eligible: false, reason: `Insufficient sick leave balance for the SL portion of this monetization. Current SL balance is ${fmt(sl)}.` }
+  return { eligible: true, vl: vlDaysNum, sl: slDaysNum, total }
 }
 
 function localDate(value) {

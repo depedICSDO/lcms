@@ -39,8 +39,8 @@ test('protected mandatory-leave credits are usable but excluded from monetizatio
   assert.equal(protectedVlBalance(employee), 22)
   assert.equal(vlBalance(employee), 47)
   assert.equal(retirementLeaveMonths(employee), 1)
-  assert.equal(monetizationEligibility(employee, 'VL20').eligible, true)
-  assert.equal(monetizationEligibility(employee, 'VL30').eligible, false)
+  assert.equal(monetizationEligibility(employee, 20, 0).eligible, true)
+  assert.equal(monetizationEligibility(employee, 25, 5).eligible, false)
 })
 
 test('CTO excludes expired grants and warns within 14 days', () => {

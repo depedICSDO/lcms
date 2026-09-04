@@ -2,12 +2,15 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import styles from './Topbar.module.css'
 import ThemeSelector from './ThemeSelector'
+import UpdateModal from './UpdateModal'
+import lcmsLogo from '../../../image/LCMS.png'
 
-export default function Topbar() {
+export default function Topbar({ roleOverride } = {}) {
   const { user, logout, isHRMO, isDiagnostic, resetDiagnosticRole } = useAuth()
   const [databaseBusy, setDatabaseBusy] = useState(false)
   const [updateStatus, setUpdateStatus] = useState({ state: 'idle', message: 'Check for updates' })
   const [salaryGuidanceStatus, setSalaryGuidanceStatus] = useState({ state: 'idle', message: 'Check official DBM releases' })
+  const [showUpdateModal, setShowUpdateModal] = useState(false)
 
   useEffect(() => {
     const updater = window.electronAPI
@@ -22,27 +25,16 @@ export default function Topbar() {
     }
   }, [])
 
-  async function handleUpdate() {
-    if (updateStatus.state === 'downloaded') {
-      await window.electronAPI?.installUpdate()
-      return
-    }
-    if (updateStatus.state === 'available') {
-      await window.electronAPI?.openUpdateRelease()
-      return
-    }
-    const [status] = await Promise.all([
-      window.electronAPI?.checkForUpdates(),
-      window.electronAPI?.checkDbmSalaryGuidance?.().then(result => result && setSalaryGuidanceStatus(result)),
-    ])
+  async function handleRecheck() {
+    const status = await window.electronAPI?.checkForUpdates()
     if (status) setUpdateStatus(status)
   }
 
   const updateBusy = ['checking', 'downloading'].includes(updateStatus.state)
   const updateLabel = updateStatus.state === 'downloaded'
-    ? 'Restart & Install'
+    ? 'Update Ready'
     : updateStatus.state === 'available'
-      ? 'View Update'
+      ? 'Update Available'
     : updateStatus.state === 'downloading'
       ? `Updating ${updateStatus.percent || 0}%`
       : updateStatus.state === 'checking'
@@ -80,17 +72,22 @@ export default function Topbar() {
   return (
     <div className={styles.bar}>
       <div className={styles.brand}>
-        <div className={styles.seal}>DepEd</div>
-        <div>
-          <div className={styles.title}>Leave Credits Management System (LCMS)</div>
-          <div className={styles.sub}>Personnel Leave Management</div>
-        </div>
+        <img
+          className={styles.logo}
+          src={lcmsLogo}
+          alt="LCMS — Leave Credits Management System"
+        />
       </div>
 
       <div className={styles.right}>
         <ThemeSelector compact />
         {window.electronAPI?.checkForUpdates && (
-          <button className={updateStatus.state === 'downloaded' ? styles.updateReadyBtn : styles.dataBtn} onClick={handleUpdate} disabled={updateBusy} title={updateStatus.message}>
+          <button
+            className={updateStatus.state === 'downloaded' || updateStatus.state === 'available' ? styles.updateReadyBtn : styles.dataBtn}
+            onClick={() => setShowUpdateModal(true)}
+            disabled={updateBusy}
+            title={updateStatus.message}
+          >
             {updateLabel}
           </button>
         )}
@@ -115,11 +112,11 @@ export default function Topbar() {
         <div className={styles.userInfo}>
           <span
             className={styles.roleBadge}
-            style={isHRMO
+            style={roleOverride || isHRMO
               ? { background: 'var(--sdo-blue)', color: '#fff' }
               : { background: '#EBF3FC', color: '#0c447c' }}
           >
-            {isHRMO ? 'HRMO' : 'AOII'}
+            {roleOverride || (isHRMO ? 'HRMO' : 'AOII')}
           </span>
           <span className={styles.username}>{user?.full_name || user?.username}</span>
         </div>
@@ -127,6 +124,16 @@ export default function Topbar() {
           Sign Out
         </button>
       </div>
+
+      {showUpdateModal && (
+        <UpdateModal
+          status={updateStatus}
+          onClose={() => setShowUpdateModal(false)}
+          onRecheck={handleRecheck}
+          onInstall={() => window.electronAPI?.installUpdate()}
+          onOpenRelease={() => window.electronAPI?.openUpdateRelease()}
+        />
+      )}
     </div>
   )
 }

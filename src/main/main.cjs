@@ -1,6 +1,7 @@
 const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron')
 const { autoUpdater } = require('electron-updater')
 const path = require('path')
+const fs = require('fs')
 const {
   CURRENT_DBM_SALARY_CIRCULAR,
   DBM_SALARY_GUIDANCE_URL,
@@ -93,6 +94,7 @@ function createWindow() {
     minWidth: 1024,
     minHeight: 680,
     title: 'Leave Credits Management System (LCMS)',
+    icon: path.join(__dirname, '../image/lcms.ico'),
     backgroundColor: '#f9f9f8',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -238,3 +240,26 @@ ipcMain.handle('database:pending-changes', () => getPendingChanges())
 ipcMain.handle('database:resolve-change', (_event, payload) => resolvePendingChange(payload))
 ipcMain.handle('database:backup', () => backupDatabase())
 ipcMain.handle('database:restore', () => restoreDatabase())
+
+// --- Generic text-file save/open (CSV export/import, etc.) ---
+ipcMain.handle('file:save-text', async (_event, { defaultFilename, content, filters }) => {
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Save File',
+    defaultPath: path.join(app.getPath('documents'), defaultFilename || 'export.csv'),
+    filters: filters || [{ name: 'CSV File', extensions: ['csv'] }]
+  })
+  if (result.canceled || !result.filePath) return { canceled: true }
+  fs.writeFileSync(result.filePath, content, 'utf-8')
+  return { success: true, filePath: result.filePath }
+})
+
+ipcMain.handle('file:open-text', async (_event, { filters } = {}) => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Open File',
+    properties: ['openFile'],
+    filters: filters || [{ name: 'CSV File', extensions: ['csv'] }]
+  })
+  if (result.canceled || !result.filePaths[0]) return { canceled: true }
+  const content = fs.readFileSync(result.filePaths[0], 'utf-8')
+  return { success: true, filePath: result.filePaths[0], content }
+})

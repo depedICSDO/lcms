@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/utils/supabase'
 import { createLocalId, hasLocalDatabase, recordLocalLeave, syncPendingChanges } from '@/utils/dataStore'
-import { LEAVE_TYPES_TEACHING, LEAVE_TYPES_NONTEACHING, MONETIZATION_OPTIONS, ctoBalance, fmt, leaveAvailability, monetizationEligibility, protectedVlBalance, regularVlBalance, slBalance, vlBalance, vscBalance } from '@/utils/leaveCalc'
+import { LEAVE_TYPES_TEACHING, LEAVE_TYPES_NONTEACHING, MONETIZATION_VL_OPTIONS, MONETIZATION_SL_OPTIONS, monetizationOptionKey, ctoBalance, fmt, leaveAvailability, monetizationEligibility, protectedVlBalance, regularVlBalance, slBalance, vlBalance, vscBalance } from '@/utils/leaveCalc'
 import styles from './Modal.module.css'
 
 export default function LeaveTransactionModal({ employee, onClose, onSaved }) {
@@ -21,7 +21,8 @@ export default function LeaveTransactionModal({ employee, onClose, onSaved }) {
     with_pay: true,
     order_no: '',
     approved_by: '',
-    monetization_option: 'VL10',
+    monetization_vl: 10,
+    monetization_sl: 0,
   })
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
@@ -53,11 +54,11 @@ export default function LeaveTransactionModal({ employee, onClose, onSaved }) {
   }
 
   async function handleSave() {
-    const days = form.txn_type === 'MONETIZE' ? MONETIZATION_OPTIONS[form.monetization_option].vl : +form.days
+    const days = form.txn_type === 'MONETIZE' ? form.monetization_vl + form.monetization_sl : +form.days
     if (!days || isNaN(days) || days <= 0) { setErr('Enter a valid number of days.'); return }
     if (!form.date_from) { setErr('Date from is required.'); return }
     if (form.txn_type === 'MONETIZE') {
-      const eligibility = monetizationEligibility(employee, form.monetization_option)
+      const eligibility = monetizationEligibility(employee, form.monetization_vl, form.monetization_sl)
       if (!eligibility.eligible) { setErr(eligibility.reason); return }
     }
     if (form.txn_type === 'CTO_DEBIT' && days > ctoBalance(employee)) { setErr('Insufficient unexpired CTO balance.'); return }
@@ -90,12 +91,14 @@ export default function LeaveTransactionModal({ employee, onClose, onSaved }) {
       if (form.txn_type === 'MONETIZE') {
         const { error: monetizationError } = await supabase.rpc('lcms_record_monetization', {
           employee_uuid: employee.id,
-          deduction_option: form.monetization_option,
+          deduction_option: monetizationOptionKey(form.monetization_vl, form.monetization_sl),
           monetization_date: form.date_from,
           monetization_note: form.remarks || form.reason || null
         })
         if (monetizationError) throw monetizationError
-        setSuccess(`${days} VL days monetized and documented. At least 5 regular VL days remain.`)
+        setSuccess(form.monetization_sl > 0
+          ? `${days} days monetized (${form.monetization_vl} VL + ${form.monetization_sl} SL) and documented. At least 5 regular VL days remain.`
+          : `${days} VL days monetized and documented. At least 5 regular VL days remain.`)
         await onSaved?.()
         return
       }
@@ -175,10 +178,10 @@ export default function LeaveTransactionModal({ employee, onClose, onSaved }) {
       ]
 
   return (
-    <div className={styles.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className={styles.overlay}>
       <div className={styles.modal} style={{ maxWidth: 480 }}>
         <div className={styles.modalHeader}>
-          <h2>Record Leave — {employee.last_name}, {employee.first_name}</h2>
+          <h2>Record Leave — {employee.last_name}, {employee.first_name}{employee.middle_name ? ` ${employee.middle_name}` : ''}</h2>
           <button className={styles.closeBtn} onClick={onClose}>✕</button>
         </div>
 
@@ -222,12 +225,18 @@ export default function LeaveTransactionModal({ employee, onClose, onSaved }) {
                   </div>}
                   <div className={styles.field}>
                     <label>Number of Days *</label>
-                    <input type="number" min="0.5" step="0.5" value={form.txn_type === 'MONETIZE' ? MONETIZATION_OPTIONS[form.monetization_option].vl : form.days} disabled={form.txn_type === 'MONETIZE'} onChange={e => set('days', e.target.value)} placeholder="0.00" />
+                    <input type="number" min="0.5" step="0.5" value={form.txn_type === 'MONETIZE' ? form.monetization_vl + form.monetization_sl : form.days} disabled={form.txn_type === 'MONETIZE'} onChange={e => set('days', e.target.value)} placeholder="0.00" />
                   </div>
                   {form.txn_type === 'MONETIZE' && <div className={styles.field}>
                     <label>VL Days to Monetize *</label>
-                    <select value={form.monetization_option} onChange={e => set('monetization_option', e.target.value)}>
-                      {Object.entries(MONETIZATION_OPTIONS).map(([key, option]) => <option key={key} value={key}>{option.label}</option>)}
+                    <select value={form.monetization_vl} onChange={e => set('monetization_vl', +e.target.value)}>
+                      {MONETIZATION_VL_OPTIONS.map(days => <option key={days} value={days}>{days} VL day(s)</option>)}
+                    </select>
+                  </div>}
+                  {form.txn_type === 'MONETIZE' && <div className={styles.field}>
+                    <label>SL Days to Monetize</label>
+                    <select value={form.monetization_sl} onChange={e => set('monetization_sl', +e.target.value)}>
+                      {MONETIZATION_SL_OPTIONS.map(days => <option key={days} value={days}>{days} SL day(s)</option>)}
                     </select>
                   </div>}
                   <div className={styles.field}>

@@ -15,7 +15,6 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      # No VITE_SUPABASE_* env needed — supabase.js falls back to the public
+      # project URL/anon key baked in as defaults when these are unset.
       - run: npm run build
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}

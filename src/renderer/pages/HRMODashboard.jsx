@@ -96,7 +96,7 @@ export default function HRMODashboard() {
     <div className={styles.page}>
       {ctoWarnings.length > 0 && <div className={`${styles.infoBox} ${styles.infoBoxDanger}`} role="alert">
         <strong>CTO expires within 14 days:</strong> {ctoWarnings.map(({ employee, credit }) =>
-          `${employee.last_name}, ${employee.first_name}: ${fmt(credit.remaining_days)} day(s), credited ${fmtDate(credit.granted_on)}, expires ${fmtDate(credit.expires_on)}`
+          `${employee.last_name}, ${employee.first_name}${employee.middle_name ? ` ${employee.middle_name}` : ''}: ${fmt(credit.remaining_days)} day(s), credited ${fmtDate(credit.granted_on)}, expires ${fmtDate(credit.expires_on)}`
         ).join(' • ')}
       </div>}
       {/* Stats */}
@@ -135,7 +135,7 @@ export default function HRMODashboard() {
                       ? <tr><td colSpan={7} className={styles.emptyState}>No pending leave requests.</td></tr>
                       : pendingRequests.map(request => (
                           <tr key={request.id}>
-                            <td><div className={styles.nameCell}>{request.employee?.last_name}, {request.employee?.first_name}</div><div className={styles.subCell}>{request.school_id}</div></td>
+                            <td><div className={styles.nameCell}>{request.employee?.last_name}, {request.employee?.first_name}{request.employee?.middle_name ? ` ${request.employee.middle_name}` : ''}</div><div className={styles.subCell}>{request.school_id}</div></td>
                             <td>{request.requested_by}</td>
                             <td><div>{request.leave_type}</div>{request.monetization_option && <div className={styles.subCell}>{request.monetization_option.replace('VL', '')} VL days</div>}</td>
                             <td>{fmtDate(request.date_from)}{request.date_to !== request.date_from ? ` – ${fmtDate(request.date_to)}` : ''}</td>
@@ -231,10 +231,10 @@ export default function HRMODashboard() {
                           <tr key={emp.id}>
                             <td>
                               <button className={styles.nameButton} onClick={() => setDetailTarget(emp)}>
-                                {emp.last_name}, {emp.first_name} {emp.middle_name ? emp.middle_name[0] + '.' : ''}
+                                {emp.last_name}, {emp.first_name}{emp.middle_name ? ` ${emp.middle_name}` : ''}
                               </button>
                               <div className={styles.subCell}>
-                                {emp.employee_no} · {emp.position}
+                                {emp.position}
                                 {emp.assigned_school_id ? ` · ${schoolNameById(emp.assigned_school_id)}` : ''}
                               </div>
                             </td>
@@ -257,9 +257,9 @@ export default function HRMODashboard() {
                             </td>
                             <td>
                               <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                                <button className={styles.btnSm} onClick={() => setDetailTarget(emp)}>View</button>
-                                <button className={styles.btnSm} onClick={() => { setEditTarget(emp); setShowAdd(true) }}>Edit</button>
-                                <button className={styles.btnSm} onClick={() => setTxnTarget(emp)}>+ Leave</button>
+                                <button className={styles.btnInfoSm} onClick={() => setDetailTarget(emp)}>View</button>
+                                <button className={styles.btnWarnSm} onClick={() => { setEditTarget(emp); setShowAdd(true) }}>Edit</button>
+                                <button className={styles.btnSuccessSm} onClick={() => setTxnTarget(emp)}>+ Leave</button>
                               </div>
                             </td>
                           </tr>

@@ -49,7 +49,7 @@ export function AuthProvider({ children }) {
 
         setUser(diagnosticUser)
         sessionStorage.setItem('leave_session', JSON.stringify(diagnosticUser))
-        return { success: true }
+        return { success: true, role: diagnosticUser.role }
       }
 
       // Resolve only the login email through a restricted RPC. The profiles
@@ -98,7 +98,7 @@ export function AuthProvider({ children }) {
 
       setUser(sessionUser)
       sessionStorage.setItem('leave_session', JSON.stringify(sessionUser))
-      return { success: true }
+      return { success: true, role: sessionUser.role }
     } catch (err) {
       setError(err.message)
       return { success: false, error: err.message }
@@ -107,19 +107,39 @@ export function AuthProvider({ children }) {
     }
   }
 
-  async function register({ username, email, password, fullName }) {
+  // Eligibility is matched on email + name (not username — nobody pre-assigns
+  // that anymore, the registrant picks their own). Returns which part failed
+  // so the caller can show a specific reason instead of a generic rejection.
+  async function checkRegistration({ email, lastName, firstName, middleName }) {
+    const normalizedEmail = (email || '').trim().toLowerCase()
+    if (!normalizedEmail || !lastName?.trim() || !firstName?.trim()) return null
+    const { data, error: checkErr } = await supabase.rpc('lcms_check_registration', {
+      user_email: normalizedEmail,
+      family_name: lastName.trim(),
+      given_name: firstName.trim(),
+      middle_name: middleName?.trim() || null
+    })
+    if (checkErr || !data || data.length === 0) return null
+    return data[0] // { email_matched, name_matched, already_registered, role, school_name }
+  }
+
+  async function register({ username, email, password, lastName, firstName, middleName }) {
     setLoading(true)
     setError(null)
     try {
       const normalizedUsername = username.trim()
       const normalizedEmail = email.trim().toLowerCase()
-      const { data: allowed, error: allowedErr } = await supabase.rpc('lcms_can_register_user', {
-        uname: normalizedUsername,
-        user_email: normalizedEmail
-      })
 
-      if (allowedErr) throw new Error('Unable to verify registration access. Contact the dashboard manager.')
-      if (!allowed) throw new Error('You are not approved to register. Contact the IECES dashboard manager.')
+      const check = await checkRegistration({ email: normalizedEmail, lastName, firstName, middleName })
+      if (!check || !check.email_matched) {
+        throw new Error('This email is not on the approved list. Contact the dashboard manager.')
+      }
+      if (check.already_registered) {
+        throw new Error('This email has already been registered. Please sign in instead.')
+      }
+      if (!check.name_matched) {
+        throw new Error('Your name does not match our records for this email. Check the spelling of your family, first, and middle name, or contact the dashboard manager to correct it.')
+      }
 
       const { data, error: signUpErr } = await supabase.auth.signUp({
         email: normalizedEmail,
@@ -128,7 +148,9 @@ export function AuthProvider({ children }) {
           data: {
             app_id: 'LCMS',
             username: normalizedUsername,
-            full_name: fullName.trim()
+            last_name: lastName.trim(),
+            first_name: firstName.trim(),
+            middle_name: middleName?.trim() || ''
           }
         }
       })
@@ -142,6 +164,58 @@ export function AuthProvider({ children }) {
       }
     } catch (err) {
       const message = err.message || 'Registration failed.'
+      setError(message)
+      return { success: false, error: message }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Desktop app, no web page to land a reset link on — so this sends a
+  // 6-digit code by email instead of a link, and the whole reset happens
+  // inside the login screen. Accepts a username (resolved to its email via
+  // the same lookup login uses) or an email address directly.
+  async function requestPasswordReset(usernameOrEmail) {
+    setLoading(true)
+    setError(null)
+    try {
+      const raw = usernameOrEmail.trim()
+      let targetEmail = raw
+      if (!raw.includes('@')) {
+        const { data: resolvedEmail, error: resolveErr } = await supabase.rpc('lcms_get_login_email', { uname: raw })
+        if (resolveErr || !resolvedEmail) throw new Error('Username not found or access is not approved.')
+        targetEmail = resolvedEmail
+      }
+      const { error: resetErr } = await supabase.auth.resetPasswordForEmail(targetEmail.trim().toLowerCase())
+      if (resetErr) throw resetErr
+      return { success: true, email: targetEmail }
+    } catch (err) {
+      const message = err.message || 'Unable to send a reset code.'
+      setError(message)
+      return { success: false, error: message }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function confirmPasswordReset({ email, code, newPassword }) {
+    setLoading(true)
+    setError(null)
+    try {
+      const { error: verifyErr } = await supabase.auth.verifyOtp({
+        email: email.trim().toLowerCase(),
+        token: code.trim(),
+        type: 'recovery'
+      })
+      if (verifyErr) throw new Error('That code is invalid or has expired. Request a new one.')
+
+      const { error: updateErr } = await supabase.auth.updateUser({ password: newPassword })
+      if (updateErr) throw updateErr
+
+      await supabase.auth.signOut()
+      return { success: true }
+    } catch (err) {
+      const message = err.message || 'Unable to reset the password.'
       setError(message)
       return { success: false, error: message }
     } finally {
@@ -179,7 +253,7 @@ export function AuthProvider({ children }) {
   const canEdit = isHRMO
 
   return (
-    <AuthContext.Provider value={{ user, loading, error, login, register, logout, clearError, chooseDiagnosticRole, resetDiagnosticRole, isHRMO, isAOII, isDiagnostic, canEdit }}>
+    <AuthContext.Provider value={{ user, loading, error, login, register, checkRegistration, requestPasswordReset, confirmPasswordReset, logout, clearError, chooseDiagnosticRole, resetDiagnosticRole, isHRMO, isAOII, isDiagnostic, canEdit }}>
       {children}
     </AuthContext.Provider>
   )

@@ -119,13 +119,15 @@ export default function EmployeeModal({ employee, onSave, onClose }) {
     setForm(current => ({
       ...current,
       work_assignment: workAssignment,
-      position: current.work_assignment === workAssignment ? current.position : '',
-      salary_grade: current.work_assignment === workAssignment ? current.salary_grade : '',
-      salary_step: current.work_assignment === workAssignment ? current.salary_step : 1,
-      monthly_salary: current.work_assignment === workAssignment ? current.monthly_salary : '',
       assigned_school_id: workAssignment === 'School-Based' ? current.assigned_school_id : '',
     }))
-    if (form.work_assignment !== workAssignment) setIsCustomPosition(false)
+    // Keep whatever position was already entered — SDO-Based and School-Based draw
+    // from different built-in lists, so a position that doesn't exist in the new
+    // list just falls back to the free-text custom field instead of being cleared.
+    const builtIn = workAssignment === 'School-Based' ? POSITIONS_NONTEACHING_SCHOOL : POSITIONS_NONTEACHING_SDO
+    const group = customPositionGroup(form.emp_type, workAssignment)
+    const known = [...builtIn, ...(customPositions[group] || [])]
+    setIsCustomPosition(Boolean(form.position) && !known.includes(form.position))
   }
 
   function selectPosition(value) {
@@ -286,7 +288,7 @@ export default function EmployeeModal({ employee, onSave, onClose }) {
 
   if (!isEdit && !form.emp_type) {
     return (
-      <div className={styles.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className={styles.overlay}>
         <div className={styles.modal} style={{ maxWidth: 480 }}>
           <div className={styles.modalHeader}>
             <h2>Add Employee — Select Employee Type</h2>
@@ -314,10 +316,10 @@ export default function EmployeeModal({ employee, onSave, onClose }) {
   }
 
   return (
-    <div className={styles.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className={styles.overlay}>
       <div className={`${styles.modal} ${styles.employeeModal}`}>
         <div className={styles.modalHeader}>
-          <h2>{isEdit ? `Edit — ${employee.last_name}, ${employee.first_name}` : 'Add Employee'}</h2>
+          <h2>{isEdit ? `Edit — ${employee.last_name}, ${employee.first_name}${employee.middle_name ? ` ${employee.middle_name}` : ''}` : 'Add Employee'}</h2>
           <button className={styles.closeBtn} onClick={onClose}>✕</button>
         </div>
 

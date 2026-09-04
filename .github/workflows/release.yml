@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -35,11 +36,10 @@ jobs:
       - name: Run tests
         run: npm test
 
+      # No VITE_SUPABASE_* env needed — supabase.js falls back to the public
+      # project URL/anon key baked in as defaults when these are unset.
       - name: Build Windows installer
         run: npm run dist -- --win nsis --publish never
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
       - name: Upload Windows release files
         uses: actions/upload-artifact@v4
@@ -82,11 +82,10 @@ jobs:
       - name: Run tests
         run: npm test
 
+      # No VITE_SUPABASE_* env needed — supabase.js falls back to the public
+      # project URL/anon key baked in as defaults when these are unset.
       - name: Build macOS installer
         run: npm run dist -- --mac dmg --${{ matrix.arch }} --publish never
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
       - name: Upload macOS release files
         uses: actions/upload-artifact@v4

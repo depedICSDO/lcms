@@ -23,21 +23,16 @@
   100% { transform: scale(2.2); opacity: 0; }
 }
 
-.inner {
-  width: 56px;
-  height: 56px;
+.logo {
+  width: 520px;
+  height: 520px;
+  object-fit: contain;
   border-radius: 50%;
   background: rgba(255,255,255,0.15);
   border: 1px solid rgba(255,255,255,0.35);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   position: relative;
   z-index: 1;
 }
 
-.label { color: #fff; font-size: 16px; font-weight: 600; }
-.sub { color: rgba(255,255,255,0.6); font-size: 12px; }
+.label { color: #000; font-size: 16px; font-weight: 600; }
+.sub { color: #000; font-size: 12px; }

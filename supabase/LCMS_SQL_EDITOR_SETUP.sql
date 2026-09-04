@@ -26,9 +26,15 @@ create unique index if not exists lcms_profiles_email_ci
 
 create table if not exists public."LCMS-allowed-users" (
   id uuid primary key default gen_random_uuid(),
-  username text not null,
+  -- Username is chosen by the registrant at signup, not assigned ahead of
+  -- time — eligibility is matched on email + name instead (see
+  -- lcms_check_registration below), so this stays nullable pre-registration.
+  username text,
   email text not null,
   full_name text,
+  last_name text,
+  first_name text,
+  middle_name text,
   role text not null default 'aoii' check (role in ('hrmo', 'aoii')),
   school_id text not null default 'DEFAULT',
   school_name text not null default 'Default Organization',
@@ -39,8 +45,6 @@ create table if not exists public."LCMS-allowed-users" (
   updated_at timestamptz not null default now()
 );
 
-create unique index if not exists lcms_allowed_username_ci
-  on public."LCMS-allowed-users" (lower(username));
 create unique index if not exists lcms_allowed_email_ci
   on public."LCMS-allowed-users" (lower(email));
 
@@ -74,20 +78,47 @@ as $$
   limit 1;
 $$;
 
-create or replace function public.lcms_can_register_user(uname text, user_email text)
-returns boolean
-language sql
+-- Single source of truth for registration eligibility: tells the caller
+-- exactly which part failed (email vs name) so the UI can show a specific
+-- message instead of a generic "not approved" error.
+create or replace function public.lcms_check_registration(
+  user_email text, family_name text, given_name text, middle_name text default null
+)
+returns table(email_matched boolean, name_matched boolean, already_registered boolean, role text, school_name text)
+language plpgsql
 stable
 security definer
 set search_path = ''
 as $$
-  select exists (
-    select 1 from public."LCMS-allowed-users" a
-    where lower(a.username) = lower(trim(uname))
-      and lower(a.email) = lower(trim(user_email))
-      and a.registered_user_id is null
-      and a.is_active
-  );
+declare
+  by_email public."LCMS-allowed-users"%rowtype;
+  matched boolean := false;
+begin
+  select * into by_email from public."LCMS-allowed-users" a
+  where lower(a.email) = lower(trim(user_email)) and a.is_active
+  limit 1;
+
+  if not found then
+    return query select false, false, false, null::text, null::text;
+    return;
+  end if;
+
+  matched :=
+    lower(trim(by_email.last_name)) = lower(trim(family_name))
+    and lower(trim(by_email.first_name)) = lower(trim(given_name))
+    and (
+      coalesce(trim(by_email.middle_name), '') = ''
+      or coalesce(trim(middle_name), '') = ''
+      or lower(left(trim(by_email.middle_name), 1)) = lower(left(trim(middle_name), 1))
+    );
+
+  return query select
+    true,
+    matched,
+    (by_email.registered_user_id is not null),
+    case when matched then by_email.role else null end,
+    case when matched then by_email.school_name else null end;
+end;
 $$;
 
 create or replace function public.lcms_get_login_email(uname text)
@@ -123,12 +154,12 @@ $$;
 
 revoke all on function public.lcms_is_hrmo() from public;
 revoke all on function public.lcms_current_school_id() from public;
-revoke all on function public.lcms_can_register_user(text, text) from public;
+revoke all on function public.lcms_check_registration(text, text, text, text) from public;
 revoke all on function public.lcms_get_login_email(text) from public;
 revoke all on function public.lcms_is_current_user_allowed() from public;
 grant execute on function public.lcms_is_hrmo() to authenticated;
 grant execute on function public.lcms_current_school_id() to authenticated;
-grant execute on function public.lcms_can_register_user(text, text) to anon, authenticated;
+grant execute on function public.lcms_check_registration(text, text, text, text) to anon, authenticated;
 grant execute on function public.lcms_get_login_email(text) to anon, authenticated;
 grant execute on function public.lcms_is_current_user_allowed() to authenticated;
 
@@ -144,32 +175,48 @@ set search_path = ''
 as $$
 declare
   approved public."LCMS-allowed-users"%rowtype;
-  signup_username text := trim(new.raw_user_meta_data ->> 'username');
+  meta jsonb := new.raw_user_meta_data;
+  reg_last text := trim(meta ->> 'last_name');
+  reg_first text := trim(meta ->> 'first_name');
+  reg_middle text := nullif(trim(coalesce(meta ->> 'middle_name', '')), '');
+  reg_username text := trim(meta ->> 'username');
+  display_name text;
 begin
-  if coalesce(new.raw_user_meta_data ->> 'app_id', '') <> 'LCMS' then
+  if coalesce(meta ->> 'app_id', '') <> 'LCMS' then
     return new;
   end if;
 
   select * into approved
   from public."LCMS-allowed-users" a
-  where lower(a.username) = lower(signup_username)
-    and lower(a.email) = lower(new.email)
+  where lower(a.email) = lower(new.email)
     and a.registered_user_id is null
     and a.is_active
   for update
   limit 1;
 
   if not found then
-    raise exception 'LCMS registration is not authorized for this user';
+    raise exception 'LCMS registration is not authorized for this email address';
   end if;
+
+  if lower(trim(approved.last_name)) is distinct from lower(reg_last)
+     or lower(trim(approved.first_name)) is distinct from lower(reg_first)
+     or not (
+       coalesce(trim(approved.middle_name), '') = ''
+       or coalesce(reg_middle, '') = ''
+       or lower(left(trim(approved.middle_name), 1)) = lower(left(reg_middle, 1))
+     ) then
+    raise exception 'LCMS registration name does not match the approved record for this email';
+  end if;
+
+  display_name := trim(concat_ws(' ', reg_first, reg_middle, reg_last));
 
   insert into public."LCMS-profiles" (
     id, username, email, full_name, role, school_id, school_name
   ) values (
     new.id,
-    approved.username,
+    reg_username,
     new.email,
-    coalesce(nullif(approved.full_name, ''), nullif(new.raw_user_meta_data ->> 'full_name', ''), approved.username),
+    coalesce(nullif(display_name, ''), reg_username),
     approved.role,
     approved.school_id,
     approved.school_name
@@ -426,7 +473,7 @@ alter view if exists public.leave_balances set (security_invoker = true);
 -- First approved HRMO account (edit values before running this INSERT)
 -- ---------------------------------------------------------------------------
 -- insert into public."LCMS-allowed-users"
---   (username, email, full_name, role, school_id, school_name, added_by)
+--   (email, last_name, first_name, middle_name, role, school_id, school_name, added_by)
 -- values
---   ('hrmo_admin', 'replace-me@example.com', 'HRMO Administrator', 'hrmo',
---    'SDO-ISABELA-CITY', 'SDO Isabela City', 'IECES Dashboard Manager');
+--   ('replace-me@example.com', 'Dela Cruz', 'Juan', 'Santos', 'hrmo',
+--    'DEFAULT', 'Default Organization', 'IECES Dashboard Manager');
