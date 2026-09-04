@@ -17,10 +17,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUpdateAvailable: (cb) => ipcRenderer.on('update-available', (_event, payload) => cb(payload)),
   onUpdateDownloaded: (cb) => ipcRenderer.on('update-downloaded', (_event, payload) => cb(payload)),
   onUpdateStatus: (cb) => ipcRenderer.on('update-status', (_event, payload) => cb(payload)),
+  onMenuCheckForUpdates: (cb) => {
+    const listener = () => cb()
+    ipcRenderer.on('menu:check-for-updates', listener)
+    return () => ipcRenderer.removeListener('menu:check-for-updates', listener)
+  },
   removeUpdateListeners: () => {
     ipcRenderer.removeAllListeners('update-available')
     ipcRenderer.removeAllListeners('update-downloaded')
     ipcRenderer.removeAllListeners('update-status')
+    ipcRenderer.removeAllListeners('menu:check-for-updates')
   },
 
   // Local SQLite data

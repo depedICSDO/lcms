@@ -19,9 +19,11 @@ export default function Topbar({ roleOverride } = {}) {
     updater.onUpdateStatus?.(setUpdateStatus)
     updater.getDbmSalaryGuidanceStatus?.().then(status => status && setSalaryGuidanceStatus(status))
     updater.onDbmSalaryGuidanceStatus?.(setSalaryGuidanceStatus)
+    const removeMenuListener = updater.onMenuCheckForUpdates?.(() => setShowUpdateModal(true))
     return () => {
       updater.removeUpdateListeners?.()
       updater.removeDbmSalaryGuidanceListeners?.()
+      removeMenuListener?.()
     }
   }, [])
 
