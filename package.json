@@ -1,6 +1,6 @@
 {
   "name": "leave-credits-management-system",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Leave Credits Management System (LCMS) for personnel records and leave workflows",
   "type": "module",
   "main": "src/main/main.cjs",
@@ -23,12 +23,12 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
     "concurrently": "^9.0.0",
     "electron": "^32.3.3",
     "electron-builder": "^25.0.0",
     "node-gyp": "^13.0.2",
-    "vite": "^5.4.21",
+    "vite": "^8.2.2",
     "wait-on": "^8.0.0"
   },
   "build": {

@@ -3,6 +3,7 @@ import { useAuth } from '@/hooks/useAuth'
 import styles from './Topbar.module.css'
 import ThemeSelector from './ThemeSelector'
 import UpdateModal from './UpdateModal'
+import ConfirmDialog from './ConfirmDialog'
 import lcmsLogo from '../../../image/LCMS.png'
 
 export default function Topbar({ roleOverride } = {}) {
@@ -11,6 +12,7 @@ export default function Topbar({ roleOverride } = {}) {
   const [updateStatus, setUpdateStatus] = useState({ state: 'idle', message: 'Check for updates' })
   const [salaryGuidanceStatus, setSalaryGuidanceStatus] = useState({ state: 'idle', message: 'Check official DBM releases' })
   const [showUpdateModal, setShowUpdateModal] = useState(false)
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
 
   useEffect(() => {
     const updater = window.electronAPI
@@ -122,7 +124,7 @@ export default function Topbar({ roleOverride } = {}) {
           </span>
           <span className={styles.username}>{user?.full_name || user?.username}</span>
         </div>
-        <button className={styles.logoutBtn} onClick={logout}>
+        <button className={styles.logoutBtn} onClick={() => setShowLogoutConfirm(true)}>
           Sign Out
         </button>
       </div>
@@ -134,6 +136,18 @@ export default function Topbar({ roleOverride } = {}) {
           onRecheck={handleRecheck}
           onInstall={() => window.electronAPI?.installUpdate()}
           onOpenRelease={() => window.electronAPI?.openUpdateRelease()}
+        />
+      )}
+      {showLogoutConfirm && (
+        <ConfirmDialog
+          title="Sign out?"
+          message="Are you sure you want to sign out?"
+          confirmLabel="Sign Out"
+          onCancel={() => setShowLogoutConfirm(false)}
+          onConfirm={() => {
+            setShowLogoutConfirm(false)
+            requestAnimationFrame(() => logout())
+          }}
         />
       )}
     </div>

@@ -21,6 +21,11 @@ alter table public.leave_employees
 alter table public.leave_employees
   add column if not exists item_number text;
 
+-- Keep TIN separate from employee_no. Discard PSIPOP's trailing 000 branch
+-- code and store the normalized nine-digit TIN used by the admin UI.
+alter table public.leave_employees
+  add column if not exists tin_number text;
+
 -- birth_date is sourced from the PSIPOP "Date of Birth" column. Not yet
 -- surfaced in the Add/Edit Employee UI as of this migration.
 alter table public.leave_employees

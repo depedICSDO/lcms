@@ -11,6 +11,7 @@ export default function SplashScreen() {
       </div>
       <p className={styles.label}>Leave Credits Management System (LCMS)</p>
       <p className={styles.sub}>Loading…</p>
+      <div className={styles.progress} aria-hidden="true"><span /></div>
     </div>
   )
 }

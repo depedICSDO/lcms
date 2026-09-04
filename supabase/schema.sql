@@ -14,6 +14,7 @@ create table if not exists leave_employees (
   first_name   text not null,
   middle_name  text,
   employee_no  text unique,                   -- government employee number
+  tin_number   text,                          -- normalized 9-digit TIN (PSIPOP branch code removed)
   position     text not null,
   emp_type     text not null check (emp_type in ('Teaching', 'Non-Teaching')),
   emp_status   text not null default 'Permanent'

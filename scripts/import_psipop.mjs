@@ -122,6 +122,18 @@ function mapStatus(code) {
   return code === 'T' ? 'Temporary' : 'Permanent'
 }
 
+function normalizeTin(value) {
+  const digits = String(value || '').replace(/\D/g, '')
+  return digits.length === 12 && digits.endsWith('000') ? digits.slice(0, -3) : (/^\d{9}$/.test(digits) ? digits : null)
+}
+
+function psipopPeriod(filename) {
+  const match = String(filename || '').match(/\b([A-Z]+)\s+(\d{4})\s+PSIPOP\.pdf$/i)
+  if (!match) return 'latest source'
+  const month = match[1].charAt(0).toUpperCase() + match[1].slice(1).toLowerCase()
+  return `${month} ${match[2]}`
+}
+
 function buildEmployee(record) {
   const { last_name, first_name, middle_name } = splitName(record.name)
   const positionRawUpper = record.position_raw.toUpperCase()
@@ -141,7 +153,7 @@ function buildEmployee(record) {
   const salary_step_basis_date = record.promotion_date ? convertYear(record.promotion_date) : hired_date
   const birth_date = convertYear(record.dob, { assumeAdultBirth: true })
 
-  const notes = ['Imported from PSIPOP (August 2026)']
+  const notes = [`Imported from PSIPOP (${psipopPeriod(record.file)})`]
   if (placement.placement === 'unassigned') notes.push('School not stated in division-wide PSIPOP — needs manual school assignment.')
   if (placement.placement === 'unmatched') notes.push(`Office "${record.office}" did not match a known school — needs manual school assignment.`)
   if (!['P', 'T'].includes(record.status_code)) notes.push(`PSIPOP status code "${record.status_code}" — verify employment status.`)
@@ -151,8 +163,9 @@ function buildEmployee(record) {
     id: crypto.randomUUID(),
     school_id: placement.school_id,
     last_name, first_name, middle_name,
-    employee_no: null, // not the TIN — HRMO will backfill real employee numbers later
+    employee_no: null, // Manual entry only — never derive an employee number from TIN.
     item_number: record.item_number,
+    tin_number: normalizeTin(record.tin),
     position: titleCase(record.position_raw),
     emp_type,
     emp_status: mapStatus(record.status_code),
@@ -176,6 +189,34 @@ function buildEmployee(record) {
   }
 }
 
+const PSIPOP_REFRESH_FIELDS = [
+  'last_name', 'first_name', 'middle_name', 'item_number', 'tin_number',
+  'position', 'emp_type', 'emp_status', 'work_assignment', 'hired_date',
+  'salary_grade', 'monthly_salary', 'salary_step', 'salary_step_mode',
+  'salary_step_basis_date', 'birth_date',
+]
+
+function refreshEmployee(existing, record) {
+  const source = buildEmployee(record)
+  const legacyEmployeeNumber = /^\d{9}000$/.test(String(existing.employee_no || '').replace(/\D/g, ''))
+  const refreshed = { ...existing, employee_no: legacyEmployeeNumber ? null : existing.employee_no }
+  for (const field of PSIPOP_REFRESH_FIELDS) refreshed[field] = source[field]
+  refreshed.notes = existing.notes
+    ? existing.notes.replace(/Imported from PSIPOP \([^)]+\)/, source.notes.split('. ')[0])
+    : source.notes
+
+  // Keep a manually resolved school when a division-wide PSIPOP page cannot
+  // identify the employee's specific school. Otherwise the latest PSIPOP wins.
+  if (source.school_id !== 'UNASSIGNED') {
+    refreshed.school_id = source.school_id
+    refreshed.assigned_school_id = source.assigned_school_id
+  }
+
+  const comparableFields = [...PSIPOP_REFRESH_FIELDS, 'employee_no', 'school_id', 'assigned_school_id']
+  const changed = comparableFields.some(field => (existing[field] ?? null) !== (refreshed[field] ?? null))
+  return changed ? { ...refreshed, updated_at: new Date().toISOString() } : null
+}
+
 function main() {
   const parsed = JSON.parse(readFileSync(path.join(__dirname, 'psipop_parsed.json'), 'utf-8'))
   const filled = parsed.records.filter(r => !r.vacant)
@@ -183,25 +224,33 @@ function main() {
 
   const db = new Database(DB_PATH)
   const existing = db.prepare('SELECT payload FROM employees').all().map(row => JSON.parse(row.payload))
-  const existingItemNumbers = new Set(existing.map(e => e.item_number).filter(Boolean))
-  console.log(`Existing employees in local DB: ${existing.length} (item_numbers=${existingItemNumbers.size})`)
+  const existingByItemNumber = new Map(existing.filter(e => e.item_number).map(e => [e.item_number, e]))
+  console.log(`Existing employees in local DB: ${existing.length} (item_numbers=${existingByItemNumber.size})`)
 
   const seenInBatch = new Set()
   const toInsert = []
-  const skippedDuplicate = []
+  const toUpdate = []
+  const unchanged = []
+  const sourceDuplicates = []
   const skippedNoName = []
 
   for (const record of filled) {
     if (!record.name) { skippedNoName.push(record); continue }
-    if (existingItemNumbers.has(record.item_number)) { skippedDuplicate.push({ record, reason: 'item_number_in_db' }); continue }
-    if (seenInBatch.has(record.item_number)) { skippedDuplicate.push({ record, reason: 'item_number_dup_in_batch' }); continue }
-    const emp = buildEmployee(record)
+    if (seenInBatch.has(record.item_number)) { sourceDuplicates.push(record.item_number); continue }
     seenInBatch.add(record.item_number)
-    toInsert.push(emp)
+    const current = existingByItemNumber.get(record.item_number)
+    if (!current) toInsert.push(buildEmployee(record))
+    else {
+      const refreshed = refreshEmployee(current, record)
+      if (refreshed) toUpdate.push(refreshed)
+      else unchanged.push(record.item_number)
+    }
   }
 
   console.log(`To insert: ${toInsert.length}`)
-  console.log(`Skipped (already exist): ${skippedDuplicate.length}`)
+  console.log(`To refresh from latest PSIPOP: ${toUpdate.length}`)
+  console.log(`Already current: ${unchanged.length}`)
+  console.log(`Duplicate OSEC items in source: ${sourceDuplicates.length}`)
   console.log(`Skipped (no name / unparsed): ${skippedNoName.length}`)
 
   const placementCounts = {}
@@ -217,7 +266,9 @@ function main() {
   if (unmatchedOffices.size) console.log('WARNING unmatched offices:', [...unmatchedOffices])
 
   if (DRY_RUN) {
-    console.log('\n--dry-run: no writes performed. Sample of first 5 records to insert:')
+    console.log('\n--dry-run: no writes performed. Sample of first 5 records to refresh:')
+    console.log(JSON.stringify(toUpdate.slice(0, 5), null, 2))
+    console.log('\nSample of first 5 records to insert:')
     console.log(JSON.stringify(toInsert.slice(0, 5), null, 2))
     db.close()
     return
@@ -231,15 +282,24 @@ function main() {
     INSERT INTO sync_queue (entity_type, entity_id, operation, payload)
     VALUES ('employee', @entity_id, 'upsert', @payload)
   `)
-  const tx = db.transaction(records => {
+  const updateEmployee = db.prepare(`
+    UPDATE employees SET school_id = @school_id, last_name = @last_name,
+      updated_at = @updated_at, payload = @payload WHERE id = @id
+  `)
+  const tx = db.transaction((records, updates) => {
+    for (const emp of updates) {
+      const payload = JSON.stringify(emp)
+      updateEmployee.run({ id: emp.id, school_id: emp.school_id, last_name: emp.last_name, updated_at: emp.updated_at, payload })
+      queueChange.run({ entity_id: emp.id, payload })
+    }
     for (const emp of records) {
       const payload = JSON.stringify(emp)
       insertEmployee.run({ id: emp.id, school_id: emp.school_id, last_name: emp.last_name, updated_at: emp.updated_at, payload })
       queueChange.run({ entity_id: emp.id, payload })
     }
   })
-  tx(toInsert)
-  console.log(`\nInserted ${toInsert.length} employees into local DB and queued them for Supabase sync.`)
+  tx(toInsert, toUpdate)
+  console.log(`\nInserted ${toInsert.length} and refreshed ${toUpdate.length} employees from the latest PSIPOP; queued changes for Supabase sync.`)
   db.close()
 }
 

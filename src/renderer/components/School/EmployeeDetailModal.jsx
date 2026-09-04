@@ -48,7 +48,16 @@ export default function EmployeeDetailModal({ employee, onClose }) {
   const sl = slBalance(employee);
   const vsc = vscBalance(employee);
   const earned = totalEarned(employee.hired_date);
-  const accrualLog = !isTeaching ? generateAccrualLog(employee, 6) : [];
+  const selectedHistoryYear = historyYear === 'all' ? null : Number(historyYear);
+  const accrualMonths = selectedHistoryYear === null
+    ? 6
+    : selectedHistoryYear === currentYear ? new Date().getMonth() + 1 : 12;
+  const accrualReferenceDate = selectedHistoryYear === null || selectedHistoryYear === currentYear
+    ? new Date()
+    : new Date(selectedHistoryYear, 11, 1);
+  const accrualLog = !isTeaching
+    ? generateAccrualLog(employee, accrualMonths, accrualReferenceDate)
+    : [];
   const protectedVl = protectedVlBalance(employee);
   const mandatoryCompliance = !isTeaching ? mandatoryLeaveCompliance(employee) : null;
   const annualLeaveTypes = !isTeaching
@@ -315,7 +324,9 @@ export default function EmployeeDetailModal({ employee, onClose }) {
                 })}
               </div>
 
-              <div className={styles.dividerLabel}>Accrual History (last 6 months)</div>
+              <div className={styles.dividerLabel}>
+                Accrual History ({selectedHistoryYear === null ? 'last 6 months' : `CY ${selectedHistoryYear}`})
+              </div>
               {accrualLog.map((row, i) => (
                 <div
                   key={i}

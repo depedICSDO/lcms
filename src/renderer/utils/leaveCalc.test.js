@@ -60,6 +60,17 @@ test('uses hired_date when generating accrual history', () => {
   assert.equal(log[0].sl, 0)
 })
 
+test('generates accrual history for a selected calendar year', () => {
+  const log = generateAccrualLog(
+    { emp_type: 'Non-Teaching', hired_date: '2020-01-01' },
+    12,
+    new Date(2025, 11, 1),
+  )
+  assert.equal(log.length, 12)
+  assert.equal(log[0].month, 'January 2025')
+  assert.equal(log[11].month, 'December 2025')
+})
+
 test('handles invalid dates without returning NaN', () => {
   assert.equal(monthsOfService('', new Date('2026-01-01')), 0)
   assert.equal(yearsOfService('', new Date('2026-01-01')), 0)

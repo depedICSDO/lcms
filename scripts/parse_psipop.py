@@ -1,12 +1,35 @@
 import json
+import os
 import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pdfplumber
 
-SRC_DIR = Path('src/08 AUGUST 2026')
-OUT_FILE = Path('scripts/psipop_parsed.json')
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+OUT_FILE = PROJECT_ROOT / 'scripts/psipop_parsed.json'
+VACANT_OUT_FILE = PROJECT_ROOT / 'src/renderer/data/vacantItems.json'
+
+
+def latest_psipop_dir():
+    override = os.environ.get('LCMS_PSIPOP_DIR')
+    if override:
+        source = Path(override).resolve()
+        if not list(source.glob('*PSIPOP.pdf')):
+            raise RuntimeError(f'No PSIPOP PDFs found in LCMS_PSIPOP_DIR: {source}')
+        return source
+
+    candidates = []
+    for directory in (PROJECT_ROOT / 'src').iterdir():
+        if not directory.is_dir():
+            continue
+        pdfs = list(directory.glob('*PSIPOP.pdf'))
+        if pdfs:
+            candidates.append((max(pdf.stat().st_mtime for pdf in pdfs), directory))
+    if not candidates:
+        raise RuntimeError('No folder containing *PSIPOP.pdf files was found under src/.')
+    return max(candidates, key=lambda candidate: candidate[0])[1]
 
 OFFICE_HEADER_RE = re.compile(r'^\d{4}\.\d{4}\s+(.+)$')
 BOILERPLATE_SUBSTRINGS = (
@@ -41,7 +64,7 @@ BOILERPLATE_SUBSTRINGS = (
 )
 HEADER_TOKEN_LINES = {
     'S', 'ANNUAL SALARY AREA L T', 'S P/P/A DATE OF DATE OF CIVIL', 'C T E S A',
-    'O Y V E T', 'D P E X U', 'P BIRTH', 'E E L S',
+    'O Y V E T', 'D P E X U', 'P BIRTH', 'E E L S', '(CT)',
 }
 
 ITEM_START_RE = re.compile(r'^[A-Z0-9][A-Z0-9\-]*\d{4}(-\d{4})?\s')
@@ -226,7 +249,9 @@ def parse_pdf(path):
 
 
 def main():
-    files = sorted(SRC_DIR.glob('*PSIPOP.pdf'))
+    source_dir = latest_psipop_dir()
+    files = sorted(source_dir.glob('*PSIPOP.pdf'))
+    print(f'Using latest PSIPOP source: {source_dir} ({len(files)} PDFs)', file=sys.stderr)
     all_records = []
     all_anomalies = []
     for f in files:
@@ -239,7 +264,23 @@ def main():
         all_records.extend(records)
         all_anomalies.extend(anomalies)
 
-    OUT_FILE.write_text(json.dumps({'records': all_records, 'anomalies': all_anomalies}, indent=2, ensure_ascii=False), encoding='utf-8')
+    OUT_FILE.write_text(json.dumps({
+        'source_dir': str(source_dir.relative_to(PROJECT_ROOT)),
+        'source_files': [f.name for f in files],
+        'generated_at': datetime.now(timezone.utc).isoformat(),
+        'records': all_records,
+        'anomalies': all_anomalies,
+    }, indent=2, ensure_ascii=False), encoding='utf-8')
+    VACANT_OUT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    vacant_items = sorted(({
+        'item_number': record['item_number'],
+        'position': record.get('position_raw'),
+        'salary_grade': record.get('salary_grade'),
+        'office': record.get('office'),
+        'source_file': record.get('file'),
+    } for record in all_records if record.get('vacant') and record.get('item_number')),
+        key=lambda item: (item.get('office') or '', item.get('position') or '', item['item_number']))
+    VACANT_OUT_FILE.write_text(json.dumps(vacant_items, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
     filled_total = len([r for r in all_records if not r.get('vacant')])
     print(f'\nGRAND TOTAL records={len(all_records)} filled={filled_total} anomalies={len(all_anomalies)}', file=sys.stderr)
 

@@ -11,3 +11,5 @@ release/
 # salary) — never commit these.
 scripts/psipop_parsed.json
 src/08 AUGUST 2026/
+output/
+tmp/

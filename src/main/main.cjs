@@ -28,6 +28,8 @@ const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
 app.disableHardwareAcceleration()
 
 let mainWindow
+let allowWindowClose = false
+let closeConfirmationOpen = false
 let updateTimer
 let salaryGuidanceTimer
 let updateStatus = { state: 'idle', message: 'Ready to check for updates.' }
@@ -162,6 +164,28 @@ function createWindow() {
     mainWindow.show()
   })
 
+  mainWindow.on('close', async event => {
+    if (allowWindowClose) return
+    event.preventDefault()
+    if (closeConfirmationOpen) return
+    closeConfirmationOpen = true
+    const result = await dialog.showMessageBox(mainWindow, {
+      type: 'question',
+      title: 'Exit LCMS?',
+      message: 'Are you sure you want to close the application?',
+      detail: 'You will need to sign in again the next time LCMS starts.',
+      buttons: ['Close Application', 'Cancel'],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true
+    })
+    closeConfirmationOpen = false
+    if (result.response === 0) {
+      allowWindowClose = true
+      mainWindow?.close()
+    }
+  })
+
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)
     return { action: 'deny' }
@@ -187,7 +211,7 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-app.on('before-quit', () => {
+app.on('will-quit', () => {
   if (updateTimer) clearInterval(updateTimer)
   if (salaryGuidanceTimer) clearInterval(salaryGuidanceTimer)
   closeDatabase()
@@ -249,7 +273,10 @@ autoUpdater.on('update-downloaded', async info => {
     cancelId: 1,
     noLink: true
   })
-  if (result.response === 0) autoUpdater.quitAndInstall(true, true)
+  if (result.response === 0) {
+    allowWindowClose = true
+    autoUpdater.quitAndInstall(true, true)
+  }
 })
 
 autoUpdater.on('error', error => {
@@ -257,6 +284,7 @@ autoUpdater.on('error', error => {
 })
 
 ipcMain.handle('install-update', () => {
+  allowWindowClose = true
   autoUpdater.quitAndInstall(true, true)
 })
 ipcMain.handle('open-update-release', () => {

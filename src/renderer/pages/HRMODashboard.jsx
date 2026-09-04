@@ -8,8 +8,10 @@ import {
 import EmployeeModal from '@/components/HRMO/EmployeeModal'
 import LeaveTransactionModal from '@/components/HRMO/LeaveTransactionModal'
 import EmployeeDetailModal from '@/components/School/EmployeeDetailModal'
+import { personnelLeadershipPriority } from '@/utils/personnel'
 import { SCHOOLS, schoolNameById } from '@/utils/schools'
 import styles from './Dashboard.module.css'
+import ClearableSearchInput from '@/components/shared/ClearableSearchInput'
 
 export default function HRMODashboard() {
   const { employees, loading, fetch, addEmployee, updateEmployee } = useEmployees()
@@ -71,6 +73,11 @@ export default function HRMODashboard() {
     const nameB = `${b.last_name}, ${b.first_name}`
     const leaveA = a.emp_type === 'Teaching' ? vscBalance(a) : vlBalance(a)
     const leaveB = b.emp_type === 'Teaching' ? vscBalance(b) : vlBalance(b)
+    if (schoolFilter && (sortBy === 'name_asc' || sortBy === 'name_desc')) {
+      const priorityOrder = personnelLeadershipPriority(a.position, schoolFilter === 'DEFAULT')
+        - personnelLeadershipPriority(b.position, schoolFilter === 'DEFAULT')
+      if (priorityOrder) return priorityOrder
+    }
     if (sortBy === 'name_desc') return nameB.localeCompare(nameA, 'en', { sensitivity: 'base' })
     if (sortBy === 'service_desc') return yearsOfService(b.hired_date) - yearsOfService(a.hired_date) || nameA.localeCompare(nameB)
     if (sortBy === 'service_asc') return yearsOfService(a.hired_date) - yearsOfService(b.hired_date) || nameA.localeCompare(nameB)
@@ -117,7 +124,7 @@ export default function HRMODashboard() {
         </div>
       </div>
 
-      <div className={styles.card} style={{ flex: 'none', maxHeight: 280 }}>
+      {(requestsLoading || requestsError || pendingRequests.length > 0) && <div className={styles.card} style={{ flex: 'none', maxHeight: 280 }}>
         <div className={styles.cardHeader}>
           <span className={styles.cardTitle}>Pending Leave Requests</span>
           <span className={`${styles.pill} ${pendingRequests.length ? styles.pillWarn : styles.pillOk}`}>{pendingRequests.length} pending</span>
@@ -131,9 +138,7 @@ export default function HRMODashboard() {
                 <table className={styles.table}>
                   <thead><tr><th>Employee / School</th><th>Requested By</th><th>Leave</th><th>Dates</th><th>Days</th><th>Reason</th><th>Action</th></tr></thead>
                   <tbody>
-                    {pendingRequests.length === 0
-                      ? <tr><td colSpan={7} className={styles.emptyState}>No pending leave requests.</td></tr>
-                      : pendingRequests.map(request => (
+                    {pendingRequests.map(request => (
                           <tr key={request.id}>
                             <td><div className={styles.nameCell}>{request.employee?.last_name}, {request.employee?.first_name}{request.employee?.middle_name ? ` ${request.employee.middle_name}` : ''}</div><div className={styles.subCell}>{request.school_id}</div></td>
                             <td>{request.requested_by}</td>
@@ -147,7 +152,7 @@ export default function HRMODashboard() {
                   </tbody>
                 </table>
               </div>}
-      </div>
+      </div>}
 
       {/* Table card */}
       <div className={styles.card}>
@@ -161,9 +166,8 @@ export default function HRMODashboard() {
         </div>
 
         <div className={styles.toolbar}>
-          <input
+          <ClearableSearchInput
             className={styles.searchInput}
-            type="text"
             placeholder="Search by name or employee no…"
             value={search}
             onChange={e => setSearch(e.target.value)}
@@ -196,6 +200,7 @@ export default function HRMODashboard() {
             <option value="cto_desc">CTO: Highest First</option>
             <option value="type">Employee Type</option>
           </select>
+          <span className={styles.personnelCount} aria-live="polite">({filtered.length}) personnel</span>
         </div>
 
         {loading

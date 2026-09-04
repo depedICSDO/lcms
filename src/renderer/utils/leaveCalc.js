@@ -200,9 +200,9 @@ export function ctoExpiryWarnings(employee, refDate = new Date()) {
 /**
  * Generate accrual log for the past N months for a Non-Teaching employee.
  */
-export function generateAccrualLog(employee, months = 12) {
+export function generateAccrualLog(employee, months = 12, refDate = new Date()) {
   const log = []
-  const today = new Date()
+  const today = refDate
   for (let i = months - 1; i >= 0; i--) {
     const d = new Date(today.getFullYear(), today.getMonth() - i, 1)
     const hired = new Date(employeeHireDate(employee))

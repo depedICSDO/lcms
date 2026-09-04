@@ -4,13 +4,13 @@ import LoginPage from './pages/LoginPage'
 import AdminLoginPage from './pages/AdminLoginPage'
 import HRMODashboard from './pages/HRMODashboard'
 import SchoolDashboard from './pages/SchoolDashboard'
-import AllowedUsersAdmin from './pages/AllowedUsersAdmin'
+import AdminConsole from './pages/AdminConsole'
 import SplashScreen from './components/shared/SplashScreen'
 import Topbar from './components/shared/Topbar'
 import DiagnosticRoleChooser from './pages/DiagnosticRoleChooser'
 
 function AppInner() {
-  const { user, loading } = useAuth()
+  const { user, showSplash } = useAuth()
   // Reached only via 5 clicks on the login logo — not linked from anywhere
   // in the normal UI. Lands directly on the allowed-users admin screen.
   const [secretAccess, setSecretAccess] = useState(false)
@@ -27,7 +27,7 @@ function AppInner() {
     wasSignedIn.current = Boolean(user)
   }, [user])
 
-  if (loading) return <SplashScreen />
+  if (showSplash) return <SplashScreen />
   if (!user) {
     return secretAccess
       ? <AdminLoginPage onBack={() => setSecretAccess(false)} onAdminLoggedIn={() => setShowManageUsers(true)} />
@@ -40,7 +40,7 @@ function AppInner() {
       <Topbar roleOverride={showManageUsers && user.role === 'hrmo' ? 'ADMIN' : undefined} />
       <div style={{ flex: 1, overflow: 'hidden' }}>
         {showManageUsers && user.role === 'hrmo'
-          ? <AllowedUsersAdmin />
+          ? <AdminConsole />
           : user.role === 'hrmo'
             ? <HRMODashboard />
             : <SchoolDashboard />

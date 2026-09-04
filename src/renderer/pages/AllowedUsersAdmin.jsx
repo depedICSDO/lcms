@@ -8,7 +8,7 @@ const BLANK_FORM = { email: '', last_name: '', first_name: '', middle_name: '', 
 const SDO_SCHOOL_ID = 'DEFAULT'
 const SDO_SCHOOL_NAME = 'Default Organization'
 
-export default function AllowedUsersAdmin() {
+export default function AllowedUsersAdmin({ embedded = false }) {
   const { user } = useAuth()
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
@@ -95,7 +95,7 @@ export default function AllowedUsersAdmin() {
   }
 
   return (
-    <div className={styles.page}>
+    <div className={embedded ? styles.embeddedAdminPage : styles.page}>
       <div className={styles.card}>
         <div className={styles.cardHeader}>
           <span className={styles.cardTitle}>Allowed Users</span>

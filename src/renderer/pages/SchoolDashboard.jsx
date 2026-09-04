@@ -4,9 +4,11 @@ import { useLeaveRequests } from '@/hooks/useLeaveRequests'
 import { supabase } from '@/utils/supabase'
 import { toCsv, parseCsv } from '@/utils/csv'
 import { ctoBalance, ctoExpiryWarnings, vlBalance, slBalance, vscBalance, fmt, fmtDate, yearsOfService, totalEarned } from '@/utils/leaveCalc'
+import { personnelLeadershipPriority } from '@/utils/personnel'
 import EmployeeDetailModal from '@/components/School/EmployeeDetailModal'
 import LeaveRequestModal from '@/components/School/LeaveRequestModal'
 import styles from './Dashboard.module.css'
+import ClearableSearchInput from '@/components/shared/ClearableSearchInput'
 
 const CSV_COLUMNS = [
   { key: 'last_name', label: 'Family Name' },
@@ -109,6 +111,10 @@ export default function SchoolDashboard() {
     const nameB = `${b.last_name}, ${b.first_name}`
     const leaveA = a.emp_type === 'Teaching' ? vscBalance(a) : vlBalance(a)
     const leaveB = b.emp_type === 'Teaching' ? vscBalance(b) : vlBalance(b)
+    if (sortBy === 'name_asc' || sortBy === 'name_desc') {
+      const priorityOrder = personnelLeadershipPriority(a.position) - personnelLeadershipPriority(b.position)
+      if (priorityOrder) return priorityOrder
+    }
     if (sortBy === 'name_desc') return nameB.localeCompare(nameA, 'en', { sensitivity: 'base' })
     if (sortBy === 'service_desc') return yearsOfService(b.hired_date) - yearsOfService(a.hired_date) || nameA.localeCompare(nameB)
     if (sortBy === 'service_asc') return yearsOfService(a.hired_date) - yearsOfService(b.hired_date) || nameA.localeCompare(nameB)
@@ -151,7 +157,7 @@ export default function SchoolDashboard() {
         {linkMessage && <div className={styles.inlineSuccess}>{linkMessage}</div>}
       </div>
 
-      <div className={styles.card} style={{ flex: 'none', maxHeight: 230 }}>
+      {(requestError || requests.length > 0) && <div className={styles.card} style={{ flex: 'none', maxHeight: 230 }}>
         <div className={styles.cardHeader}>
           <span className={styles.cardTitle}>Leave Requests</span>
           <span className={`${styles.pill} ${styles.pillWarn}`}>{requests.filter(request => request.status === 'pending').length} pending</span>
@@ -162,9 +168,7 @@ export default function SchoolDashboard() {
               <table className={styles.table}>
                 <thead><tr><th>Employee</th><th>Leave</th><th>Dates</th><th>Days</th><th>Status</th><th>HRMO Note</th><th>Action</th></tr></thead>
                 <tbody>
-                  {requests.length === 0
-                    ? <tr><td colSpan={7} className={styles.emptyState}>No leave requests submitted.</td></tr>
-                    : requests.slice(0, 20).map(request => (
+                  {requests.slice(0, 20).map(request => (
                         <tr key={request.id}>
                           <td>{request.employee?.last_name}, {request.employee?.first_name}{request.employee?.middle_name ? ` ${request.employee.middle_name}` : ''}</td>
                           <td>{request.leave_type}</td>
@@ -180,7 +184,7 @@ export default function SchoolDashboard() {
                 </tbody>
               </table>
             </div>}
-      </div>
+      </div>}
 
       {actionMessage && <div className={actionMessage.startsWith('Cancellation failed') ? styles.inlineError : styles.inlineSuccess}>{actionMessage}</div>}
 
@@ -189,7 +193,7 @@ export default function SchoolDashboard() {
           <span className={styles.cardTitle}>Employee Leave Credit Ledger</span>
         </div>
         <div className={styles.toolbar}>
-          <input className={styles.searchInput} type="text" placeholder="Search by name or employee no…" value={search} onChange={event => setSearch(event.target.value)} />
+          <ClearableSearchInput className={styles.searchInput} placeholder="Search by name or employee no…" value={search} onChange={event => setSearch(event.target.value)} />
           <select value={typeFilter} onChange={event => setTypeFilter(event.target.value)}>
             <option value="">All types</option><option value="Teaching">Teaching</option><option value="Non-Teaching">Non-Teaching</option>
           </select>
@@ -204,6 +208,7 @@ export default function SchoolDashboard() {
             <option value="cto_desc">CTO: Highest First</option>
             <option value="type">Employee Type</option>
           </select>
+          <span className={styles.personnelCount} aria-live="polite">({list.length}) personnel</span>
         </div>
 
         {loading

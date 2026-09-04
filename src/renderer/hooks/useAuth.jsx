@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext } from 'react'
+import { useState, useEffect, createContext, useContext, useRef } from 'react'
 import { supabase } from '@/utils/supabase'
 
 // Roles:
@@ -10,22 +10,25 @@ const AuthContext = createContext(null)
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)      // { id, username, full_name, role, school_id }
   const [loading, setLoading] = useState(false)
+  const [showSplash, setShowSplash] = useState(false)
   const [error, setError] = useState(null)
+  const splashTimer = useRef(null)
 
-  // Check for persisted session on mount
+  function openAuthenticatedSession(sessionUser) {
+    if (splashTimer.current) clearTimeout(splashTimer.current)
+    setShowSplash(true)
+    setUser(sessionUser)
+    splashTimer.current = setTimeout(() => {
+      setShowSplash(false)
+      splashTimer.current = null
+    }, 1800)
+  }
+
+  // A fresh renderer always starts signed out; credentials must be confirmed
+  // on every application launch or reload.
   useEffect(() => {
-    const saved = sessionStorage.getItem('leave_session')
-    if (saved) {
-      try {
-        const savedUser = JSON.parse(saved)
-        if (savedUser.diagnostic && !import.meta.env.DEV) {
-          sessionStorage.removeItem('leave_session')
-          return
-        }
-        if (savedUser.diagnostic) savedUser.role = 'diagnostic'
-        setUser(savedUser)
-      } catch {}
-    }
+    sessionStorage.removeItem('leave_session')
+    return () => { if (splashTimer.current) clearTimeout(splashTimer.current) }
   }, [])
 
   async function login(username, password) {
@@ -47,8 +50,7 @@ export function AuthProvider({ children }) {
           diagnostic: true
         }
 
-        setUser(diagnosticUser)
-        sessionStorage.setItem('leave_session', JSON.stringify(diagnosticUser))
+        openAuthenticatedSession(diagnosticUser)
         return { success: true, role: diagnosticUser.role }
       }
 
@@ -96,8 +98,7 @@ export function AuthProvider({ children }) {
         school_name: profile.school_name
       }
 
-      setUser(sessionUser)
-      sessionStorage.setItem('leave_session', JSON.stringify(sessionUser))
+      openAuthenticatedSession(sessionUser)
       return { success: true, role: sessionUser.role }
     } catch (err) {
       setError(err.message)
@@ -225,6 +226,9 @@ export function AuthProvider({ children }) {
 
   function logout() {
     supabase.auth.signOut()
+    if (splashTimer.current) clearTimeout(splashTimer.current)
+    splashTimer.current = null
+    setShowSplash(false)
     setUser(null)
     sessionStorage.removeItem('leave_session')
   }
@@ -237,14 +241,12 @@ export function AuthProvider({ children }) {
     if (!user?.diagnostic || !['hrmo', 'aoii'].includes(role)) return
     const diagnosticUser = { ...user, role }
     setUser(diagnosticUser)
-    sessionStorage.setItem('leave_session', JSON.stringify(diagnosticUser))
   }
 
   function resetDiagnosticRole() {
     if (!user?.diagnostic) return
     const diagnosticUser = { ...user, role: 'diagnostic' }
     setUser(diagnosticUser)
-    sessionStorage.setItem('leave_session', JSON.stringify(diagnosticUser))
   }
 
   const isHRMO = user?.role === 'hrmo'
@@ -253,7 +255,7 @@ export function AuthProvider({ children }) {
   const canEdit = isHRMO
 
   return (
-    <AuthContext.Provider value={{ user, loading, error, login, register, checkRegistration, requestPasswordReset, confirmPasswordReset, logout, clearError, chooseDiagnosticRole, resetDiagnosticRole, isHRMO, isAOII, isDiagnostic, canEdit }}>
+    <AuthContext.Provider value={{ user, loading, showSplash, error, login, register, checkRegistration, requestPasswordReset, confirmPasswordReset, logout, clearError, chooseDiagnosticRole, resetDiagnosticRole, isHRMO, isAOII, isDiagnostic, canEdit }}>
       {children}
     </AuthContext.Provider>
   )

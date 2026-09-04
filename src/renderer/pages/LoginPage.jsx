@@ -167,7 +167,7 @@ export default function LoginPage({ onSecretAccess } = {}) {
 
         <div className={styles.header}>
           <p className={styles.sub2}>
-            Secure leave records and credit tracking
+            Powered by BuzzJay
           </p>
         </div>
 
@@ -358,7 +358,7 @@ export default function LoginPage({ onSecretAccess } = {}) {
         )}
 
         <div className={styles.footer}>
-          Leading with Compassionate and Modernized Services · v{__APP_VERSION__ || "1.0.0"}
+          <strong>L</strong>eading with <strong>C</strong>ompassionate and <strong>M</strong>odernized <strong>S</strong>ervices · v{__APP_VERSION__ || "1.0.0"}
         </div>
       </div>
     </div>

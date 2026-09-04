@@ -15,6 +15,7 @@ import {
   salaryStepsForGrade,
 } from '@/utils/salarySchedule'
 import { SCHOOLS } from '@/utils/schools'
+import { employeeNumber, employeeTin, formatTin, formatTinInput, normalizeTin } from '@/utils/personnel'
 import styles from './Modal.module.css'
 
 const CUSTOM_POSITIONS_KEY = 'lcms_custom_positions'
@@ -52,7 +53,7 @@ function isSchoolBased(empType, workAssignment) {
 }
 
 const BLANK = {
-  last_name: '', first_name: '', middle_name: '', employee_no: '',
+  last_name: '', first_name: '', middle_name: '', employee_no: '', tin_number: '',
   emp_type: '', work_assignment: '', position: '', emp_status: 'Permanent',
   assigned_school_id: '',
   hired_date: '', salary_grade: '', salary_step: 1, salary_step_mode: 'automatic',
@@ -69,6 +70,8 @@ export default function EmployeeModal({ employee, onSave, onClose }) {
   const isEdit = !!employee
   const [form, setForm] = useState(employee ? {
     ...employee,
+    employee_no: employeeNumber(employee),
+    tin_number: employeeTin(employee) ? formatTin(employeeTin(employee)) : '',
     work_assignment: inferWorkAssignment(employee),
     salary_step: employee.salary_step || parseSalaryStep(employee.salary_grade) || findSalaryStep(parseSalaryGrade(employee.salary_grade), employee.monthly_salary) || 1,
     salary_step_mode: employee.salary_step_mode || 'manual',
@@ -196,6 +199,11 @@ export default function EmployeeModal({ employee, onSave, onClose }) {
 
   async function handleSave() {
     if (!form.emp_type) { setErr('Select Teaching or Non-Teaching first.'); return }
+    const enteredTin = String(form.tin_number || '').trim()
+    const normalizedTin = normalizeTin(enteredTin)
+    if (enteredTin && !normalizedTin) {
+      setErr('TIN must contain nine digits, displayed as 000-000-000.'); return
+    }
     if (!form.last_name.trim()) { setErr('Last name is required.'); return }
     if (!form.first_name.trim()) { setErr('First name is required.'); return }
     if (!form.hired_date) { setErr('Date hired is required.'); return }
@@ -221,6 +229,10 @@ export default function EmployeeModal({ employee, onSave, onClose }) {
       : selectedSalaryStep
     const payload = {
       ...form,
+      // Employee No. is assigned manually. Never derive it from the TIN,
+      // OSEC item number, or any other PSIPOP field.
+      employee_no: form.employee_no?.trim() || null,
+      tin_number: normalizedTin,
       position: normalizedPosition,
       work_assignment: form.emp_type === 'Non-Teaching' ? form.work_assignment : null,
       assigned_school_id: isSchoolBased(form.emp_type, form.work_assignment) ? form.assigned_school_id : null,
@@ -377,8 +389,12 @@ export default function EmployeeModal({ employee, onSave, onClose }) {
           </div>
           <div className={styles.grid2}>
             <div className={styles.field}>
-              <label>Employee No.</label>
-              <input value={form.employee_no} onChange={e => set('employee_no', e.target.value)} placeholder="EMP-001" />
+              <label>Employee No. (optional)</label>
+              <input value={form.employee_no || ''} onChange={e => set('employee_no', e.target.value)} placeholder="Leave blank until assigned" />
+            </div>
+            <div className={styles.field}>
+              <label>TIN</label>
+              <input value={form.tin_number || ''} onChange={e => set('tin_number', formatTinInput(e.target.value))} placeholder="000-000-000" inputMode="numeric" maxLength={11} />
             </div>
             <div className={styles.field}>
               <label>Status</label>
