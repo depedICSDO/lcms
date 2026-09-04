@@ -210,10 +210,10 @@ export default function SchoolDashboard() {
           ? <div className={styles.emptyState}>Loading…</div>
           : <div className={styles.tableWrap}>
               <table className={styles.table}>
-                <thead><tr><th>Employee</th><th>Type</th><th>Date Hired</th><th>Years in Service</th><th>VL / VSC Balance</th><th>SL Balance</th><th>Total Earned (VL)</th><th>VL/VSC Used</th><th>SL Used</th><th>Actions</th></tr></thead>
+                <thead><tr><th>Employee</th><th>Type</th><th>Date Hired</th><th>Date Last Promoted</th><th>Years in Service</th><th>VL / VSC Balance</th><th>SL Balance</th><th>Total Earned (VL)</th><th>VL/VSC Used</th><th>SL Used</th><th>Actions</th></tr></thead>
                 <tbody>
                   {list.length === 0
-                    ? <tr><td colSpan={10} className={styles.emptyState}>No employees found.</td></tr>
+                    ? <tr><td colSpan={11} className={styles.emptyState}>No employees found.</td></tr>
                     : list.map(employee => {
                         const vl = employee.emp_type === 'Teaching' ? vscBalance(employee) : vlBalance(employee)
                         const sl = employee.emp_type === 'Teaching' ? null : slBalance(employee)
@@ -225,6 +225,7 @@ export default function SchoolDashboard() {
                             <td><button className={styles.nameButton} onClick={() => setDetail(employee)}>{employee.last_name}, {employee.first_name}{employee.middle_name ? ` ${employee.middle_name}` : ''}</button><div className={styles.subCell}>{employee.position}</div></td>
                             <td><span className={`${styles.pill} ${employee.emp_type === 'Teaching' ? styles.pillTeaching : styles.pillNT}`}>{employee.emp_type === 'Teaching' ? 'VSC/PVP' : 'VL+SL'}</span></td>
                             <td className={styles.subCell}>{fmtDate(employee.hired_date)}</td>
+                            <td className={styles.subCell}>{fmtDate(employee.salary_step_basis_date)}</td>
                             <td className={styles.subCell}>{yearsOfService(employee.hired_date)} year(s)</td>
                             <td className={`${styles.creditCell} ${styles.maroon}`}>{fmt(vl)}</td>
                             <td className={styles.creditCell}>{sl === null ? '—' : fmt(sl)}</td>

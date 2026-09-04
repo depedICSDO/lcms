@@ -78,6 +78,25 @@ as $$
   limit 1;
 $$;
 
+-- Filipino middle names are often two words (e.g. "Delos Reyes", "Delos
+-- Santos"); the conventional initial for either is two letters ("D.R.",
+-- "D.S."), not one. This turns a full middle name (or an initial already
+-- typed as such) into that per-word-initial form so registration/linking
+-- can match a full name against an initial-only entry either way.
+create or replace function public.lcms_name_initials(full_name text)
+returns text
+language sql
+immutable
+set search_path = ''
+as $$
+  select nullif(
+    (select string_agg(left(word, 1), '.' order by ord) || '.'
+     from unnest(regexp_split_to_array(upper(trim(coalesce(full_name, ''))), '\s+')) with ordinality as t(word, ord)
+     where word <> ''),
+    '.'
+  );
+$$;
+
 -- Single source of truth for registration eligibility: tells the caller
 -- exactly which part failed (email vs name) so the UI can show a specific
 -- message instead of a generic "not approved" error.
@@ -109,7 +128,8 @@ begin
     and (
       coalesce(trim(by_email.middle_name), '') = ''
       or coalesce(trim(middle_name), '') = ''
-      or lower(left(trim(by_email.middle_name), 1)) = lower(left(trim(middle_name), 1))
+      or lower(trim(by_email.middle_name)) = lower(trim(middle_name))
+      or public.lcms_name_initials(by_email.middle_name) = public.lcms_name_initials(middle_name)
     );
 
   return query select
@@ -203,7 +223,8 @@ begin
      or not (
        coalesce(trim(approved.middle_name), '') = ''
        or coalesce(reg_middle, '') = ''
-       or lower(left(trim(approved.middle_name), 1)) = lower(left(reg_middle, 1))
+       or lower(trim(approved.middle_name)) = lower(reg_middle)
+       or public.lcms_name_initials(approved.middle_name) = public.lcms_name_initials(reg_middle)
      ) then
     raise exception 'LCMS registration name does not match the approved record for this email';
   end if;

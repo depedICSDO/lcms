@@ -531,7 +531,8 @@ begin
       and lower(trim(e.first_name)) = lower(row_first)
       and (
         row_middle is null or coalesce(trim(e.middle_name), '') = ''
-        or lower(left(trim(e.middle_name), 1)) = lower(left(row_middle, 1))
+        or lower(trim(e.middle_name)) = lower(row_middle)
+        or public.lcms_name_initials(e.middle_name) = public.lcms_name_initials(row_middle)
       );
 
     if match_count = 0 then
