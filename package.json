@@ -1,6 +1,6 @@
 {
   "name": "leave-credits-management-system",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Leave Credits Management System (LCMS) for personnel records and leave workflows",
   "type": "module",
   "main": "src/main/main.cjs",
@@ -54,7 +54,8 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "leave-credits-management-system-setup-${version}.${ext}"
     },
     "publish": {
       "provider": "github",
